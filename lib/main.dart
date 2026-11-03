@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'core/responsive.dart';
 import 'core/theme.dart';
 import 'screens/category_screen.dart';
+import 'screens/downloads_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/library_screen.dart';
 import 'screens/player_screen.dart';
@@ -111,7 +112,7 @@ class XmlyFmApp extends StatelessWidget {
   }
 }
 
-/// 主框架：导航（首页 / 分类 / 搜索 / 我的）+ 迷你播放器。
+/// 主框架：导航（首页 / 分类 / 搜索 / 下载 / 我的）+ 迷你播放器。
 /// 紧凑档（<600）底部 NavigationBar；中 / 宽屏档左侧 NavigationRail，
 /// 迷你播放条横贯窗口底部通栏。
 class AppShell extends StatefulWidget {
@@ -128,22 +129,16 @@ class _AppShellState extends State<AppShell> {
     HomeScreen(),
     CategoryScreen(),
     SearchScreen(),
+    DownloadsScreen(embedded: true),
     LibraryScreen(),
   ];
 
   static const _railDestinations = [
     (icon: Icons.home_outlined, selectedIcon: Icons.home, label: '首页'),
-    (
-      icon: Icons.category_outlined,
-      selectedIcon: Icons.category,
-      label: '分类',
-    ),
+    (icon: Icons.category_outlined, selectedIcon: Icons.category, label: '分类'),
     (icon: Icons.search, selectedIcon: Icons.search, label: '搜索'),
-    (
-      icon: Icons.person_outline,
-      selectedIcon: Icons.person,
-      label: '我的',
-    ),
+    (icon: Icons.download_outlined, selectedIcon: Icons.download, label: '下载'),
+    (icon: Icons.person_outline, selectedIcon: Icons.person, label: '我的'),
   ];
 
   @override
@@ -183,10 +178,7 @@ class _AppShellState extends State<AppShell> {
                   ),
                   const VerticalDivider(thickness: 1, width: 1),
                   Expanded(
-                    child: IndexedStack(
-                      index: _currentIndex,
-                      children: _pages,
-                    ),
+                    child: IndexedStack(index: _currentIndex, children: _pages),
                   ),
                 ],
               ),
@@ -220,6 +212,11 @@ class _AppShellState extends State<AppShell> {
             label: '分类',
           ),
           NavigationDestination(icon: Icon(Icons.search), label: '搜索'),
+          NavigationDestination(
+            icon: Icon(Icons.download_outlined),
+            selectedIcon: Icon(Icons.download),
+            label: '下载',
+          ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),

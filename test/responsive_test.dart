@@ -22,8 +22,7 @@ class FakeXimalayaService extends XimalayaService {
       const FeedPage(items: [], offset: 0);
 
   @override
-  Future<List<CategoryTab>> fetchCategoryTabs(int categoryId) async =>
-      const [];
+  Future<List<CategoryTab>> fetchCategoryTabs(int categoryId) async => const [];
 
   @override
   Future<CategoryPageData> fetchCategoryPage(int categoryId) async =>
@@ -33,8 +32,7 @@ class FakeXimalayaService extends XimalayaService {
   Future<List<String>> fetchHotWords() async => const [];
 
   @override
-  Future<List<BillboardCategory>> fetchBillboardCategories() async =>
-      const [];
+  Future<List<BillboardCategory>> fetchBillboardCategories() async => const [];
 
   @override
   Future<List<BillboardItem>> fetchBillboardList(String categoryId) async =>
@@ -120,14 +118,12 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
 
-    testWidgets('宽屏（1400）：NavigationRail 出现、无底部 NavigationBar', (
-      tester,
-    ) async {
+    testWidgets('宽屏（1400）：NavigationRail 出现、无底部 NavigationBar', (tester) async {
       await pumpShell(tester, const Size(1400, 900));
       expect(find.byType(NavigationRail), findsOneWidget);
       expect(find.byType(NavigationBar), findsNothing);
-      // 四个目的地标签都在
-      for (final label in ['首页', '分类', '搜索', '我的']) {
+      // 五个目的地标签都在
+      for (final label in ['首页', '分类', '搜索', '下载', '我的']) {
         expect(find.text(label), findsOneWidget);
       }
     });
@@ -138,13 +134,11 @@ void main() {
       expect(find.byType(NavigationBar), findsNothing);
     });
 
-    testWidgets('紧凑（400）：底部 NavigationBar、无 NavigationRail', (
-      tester,
-    ) async {
+    testWidgets('紧凑（400）：底部 NavigationBar、无 NavigationRail', (tester) async {
       await pumpShell(tester, const Size(400, 800));
       expect(find.byType(NavigationBar), findsOneWidget);
       expect(find.byType(NavigationRail), findsNothing);
-      for (final label in ['首页', '分类', '搜索', '我的']) {
+      for (final label in ['首页', '分类', '搜索', '下载', '我的']) {
         expect(find.text(label), findsOneWidget);
       }
     });
