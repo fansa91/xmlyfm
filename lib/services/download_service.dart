@@ -317,7 +317,7 @@ class DownloadService extends ChangeNotifier {
     return null;
   }
 
-  /// 按文件名模板与去重规则组装一个待下载任务（手动入队/自动缓存共用）。
+  /// 按文件名模板与去重规则组装一个待下载任务。
   DownloadTask _buildTask(
     Track track, {
     required String albumTitle,
@@ -359,52 +359,6 @@ class DownloadService extends ChangeNotifier {
       filePath: '${dir.path}/$fileName',
       createdAt: DateTime.now().millisecondsSinceEpoch,
     );
-  }
-
-  /// 播放自动缓存的入队判定（纯逻辑）：已有任务（任何状态，含已完成）、
-  /// 付费试听、无可下地址 → 都不缓存，避免在下载管理里留重复项/残集。
-  static bool shouldCacheForPlayback({
-    required bool hasExistingTask,
-    required PlayResult result,
-  }) {
-    if (hasExistingTask) return false;
-    if (result.isSample) return false;
-    final url = result.url;
-    return url != null && url.isNotEmpty;
-  }
-
-  /// 静默缓存入队（iOS 起播自动缓存用）：后台下载，不阻塞播放。
-  /// 条件不满足直接返回 false、不产生任何提示；返回 true 表示已新建任务。
-  /// 下完后与手动下载完全一致：写标签、进下载管理、可离线播。
-  Future<bool> cacheForPlayback(
-    Track track, {
-    String albumTitle = '',
-    int index = 0,
-  }) async {
-    final dir = _dir;
-    if (dir == null) return false;
-    if (taskFor(track.trackId) != null) return false;
-    final PlayResult result;
-    try {
-      result = await resolver.resolve(track, quality: settings.defaultQuality);
-    } catch (_) {
-      return false;
-    }
-    if (!shouldCacheForPlayback(hasExistingTask: false, result: result)) {
-      return false;
-    }
-    final task = _buildTask(
-      track,
-      albumTitle: albumTitle,
-      index: index,
-      url: result.url!,
-      dir: dir,
-    );
-    _tasks.insert(0, task);
-    await _save();
-    notifyListeners();
-    _pump();
-    return true;
   }
 
   /// 批量入队。返回 (成功入队数, 第一条失败原因或 null)。
