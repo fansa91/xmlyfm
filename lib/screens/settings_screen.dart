@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../services/settings_service.dart';
 import '../widgets/detail_scaffold.dart';
+import 'download_format_dialog.dart';
 import 'theme_settings_screen.dart';
 
 /// 设置页：默认音质、baseInfo v4 切换、主题入口、关于。
@@ -29,10 +30,12 @@ class SettingsScreen extends StatelessWidget {
                 value: settings.defaultQuality,
                 underline: const SizedBox.shrink(),
                 items: Quality.levels
-                    .map((level) => DropdownMenuItem(
-                          value: level,
-                          child: Text(Quality.nameOf(level)),
-                        ))
+                    .map(
+                      (level) => DropdownMenuItem(
+                        value: level,
+                        child: Text(Quality.nameOf(level)),
+                      ),
+                    )
                     .toList(),
                 onChanged: (v) {
                   if (v != null) settings.setDefaultQuality(v);
@@ -45,6 +48,27 @@ class SettingsScreen extends StatelessWidget {
               subtitle: const Text('普通声音播放地址走 v4（带 sign）而非 v3'),
               value: settings.baseInfoV4,
               onChanged: (v) => settings.setBaseInfoV4(v),
+            ),
+            const Divider(),
+            const ListTile(
+              title: Text('下载', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.drive_file_rename_outline),
+              title: const Text('下载文件名格式'),
+              subtitle: Text(settings.downloadFileNameFormat),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () async {
+                final result = await showDialog<String>(
+                  context: context,
+                  builder: (_) => DownloadFormatDialog(
+                    initial: settings.downloadFileNameFormat,
+                  ),
+                );
+                if (result != null) {
+                  settings.setDownloadFileNameFormat(result);
+                }
+              },
             ),
             const Divider(),
             const ListTile(

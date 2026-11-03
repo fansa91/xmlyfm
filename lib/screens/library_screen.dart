@@ -3,10 +3,12 @@ import 'package:provider/provider.dart';
 
 import '../core/utils.dart';
 import '../models/models.dart';
+import '../services/download_service.dart';
 import '../services/library_service.dart';
 import '../services/player_service.dart';
 import '../widgets/cover_image.dart';
 import 'album_screen.dart';
+import 'downloads_screen.dart';
 
 /// 我的：收藏专辑 + 收藏声音 + 播放历史（本地存储，shared_preferences）。
 class LibraryScreen extends StatelessWidget {
@@ -27,6 +29,32 @@ class LibraryScreen extends StatelessWidget {
       ),
       body: ListView(
         children: [
+          Builder(
+            builder: (context) {
+              final downloads = context.watch<DownloadService>();
+              final done = downloads.completedTasks.length;
+              final active = downloads.activeTasks.length;
+              return ListTile(
+                leading: const Icon(Icons.download_outlined),
+                title: const Text('下载管理'),
+                subtitle: Text(
+                  downloads.tasks.isEmpty
+                      ? '暂无下载'
+                      : [
+                          if (done > 0) '已下载 $done 集',
+                          if (active > 0) '进行中 $active 个',
+                          if (done > 0)
+                            '占用 ${formatBytes(downloads.totalBytes)}',
+                        ].join(' · '),
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const DownloadsScreen()),
+                ),
+              );
+            },
+          ),
+          const Divider(height: 24),
           _sectionTitle(context, '收藏的专辑'),
           if (library.favorites.isEmpty)
             const Padding(
@@ -37,30 +65,39 @@ class LibraryScreen extends StatelessWidget {
             for (final fav in library.favorites)
               ListTile(
                 leading: CoverImage(url: fav.cover, size: 48, radius: 8),
-                title: Text(fav.title,
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                subtitle: Text(fav.nickname,
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                title: Text(
+                  fav.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  fav.nickname,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 trailing: IconButton(
                   icon: const Icon(Icons.favorite),
                   color: Theme.of(context).colorScheme.primary,
-                  onPressed: () => library.toggleFavorite(AlbumInfo(
-                    albumId: fav.albumId,
-                    title: fav.title,
-                    nickname: fav.nickname,
-                    cover: fav.cover,
-                    intro: '',
-                    uid: 0,
-                    isPaid: fav.isPaid,
-                    isVipFree: false,
-                    categoryId: 0,
-                    categoryName: '',
-                    playTimes: 0,
-                  )),
+                  onPressed: () => library.toggleFavorite(
+                    AlbumInfo(
+                      albumId: fav.albumId,
+                      title: fav.title,
+                      nickname: fav.nickname,
+                      cover: fav.cover,
+                      intro: '',
+                      uid: 0,
+                      isPaid: fav.isPaid,
+                      isVipFree: false,
+                      categoryId: 0,
+                      categoryName: '',
+                      playTimes: 0,
+                    ),
+                  ),
                 ),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
-                      builder: (_) => AlbumScreen(albumId: fav.albumId)),
+                    builder: (_) => AlbumScreen(albumId: fav.albumId),
+                  ),
                 ),
               ),
           const Divider(height: 24),
@@ -74,10 +111,16 @@ class LibraryScreen extends StatelessWidget {
             for (final t in library.favoriteTracks)
               ListTile(
                 leading: CoverImage(url: t.cover, size: 48, radius: 8),
-                title: Text(t.title,
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                subtitle: Text(t.nickname,
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                title: Text(
+                  t.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  t.nickname,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 trailing: IconButton(
                   icon: const Icon(Icons.favorite),
                   color: Theme.of(context).colorScheme.primary,
@@ -104,9 +147,16 @@ class LibraryScreen extends StatelessWidget {
           else
             for (final entry in library.history)
               ListTile(
-                leading: CoverImage(url: entry.track.cover, size: 48, radius: 8),
-                title: Text(entry.track.title,
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                leading: CoverImage(
+                  url: entry.track.cover,
+                  size: 48,
+                  radius: 8,
+                ),
+                title: Text(
+                  entry.track.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 subtitle: Text(
                   [
                     if (entry.albumTitle.isNotEmpty) entry.albumTitle,

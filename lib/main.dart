@@ -8,6 +8,7 @@ import 'screens/library_screen.dart';
 import 'screens/player_screen.dart';
 import 'screens/search_screen.dart';
 import 'screens/settings_screen.dart';
+import 'services/download_service.dart';
 import 'services/library_service.dart';
 import 'services/play_resolver.dart';
 import 'services/player_service.dart';
@@ -21,14 +22,42 @@ void main() async {
   await settings.init();
   final library = LibraryService();
   await library.init();
-  runApp(XmlyFmApp(settings: settings, library: library));
+  final service = XimalayaService();
+  final resolver = PlayResolver(service);
+  final downloads = DownloadService(resolver, settings);
+  await downloads.init();
+  runApp(
+    XmlyFmApp(
+      settings: settings,
+      library: library,
+      service: service,
+      resolver: resolver,
+      downloads: downloads,
+    ),
+  );
 }
 
 class XmlyFmApp extends StatelessWidget {
   final SettingsService settings;
   final LibraryService library;
+  final XimalayaService service;
+  final PlayResolver resolver;
+  final DownloadService downloads;
 
-  const XmlyFmApp({super.key, required this.settings, required this.library});
+  const XmlyFmApp({
+    super.key,
+    required this.settings,
+    required this.library,
+    required this.service,
+    required this.resolver,
+    required this.downloads,
+  });
+
+  PlayerService _newPlayer() {
+    final player = PlayerService(resolver, settings, library);
+    player.downloads = downloads;
+    return player;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,21 +65,20 @@ class XmlyFmApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider.value(value: settings),
         ChangeNotifierProvider.value(value: library),
-        Provider(create: (_) => XimalayaService()),
-        ProxyProvider<XimalayaService, PlayResolver>(
-          update: (_, service, _) => PlayResolver(service),
-        ),
-        ChangeNotifierProxyProvider3<PlayResolver, SettingsService,
-            LibraryService, PlayerService>(
-          create: (ctx) => PlayerService(
-            ctx.read<PlayResolver>(),
-            ctx.read<SettingsService>(),
-            ctx.read<LibraryService>(),
-          ),
-          update: (_, resolver, st, lib, player) {
+        ChangeNotifierProvider.value(value: downloads),
+        Provider.value(value: service),
+        Provider.value(value: resolver),
+        ChangeNotifierProxyProvider3<
+          PlayResolver,
+          SettingsService,
+          LibraryService,
+          PlayerService
+        >(
+          create: (_) => _newPlayer(),
+          update: (_, _, st, _, player) {
             // 同步 baseInfo v4 开关到解析器
             resolver.useBaseInfoV4 = st.baseInfoV4;
-            return player ?? PlayerService(resolver, st, lib);
+            return player ?? _newPlayer();
           },
         ),
       ],
@@ -125,10 +153,7 @@ class _AppShellState extends State<AppShell> {
             selectedIcon: Icon(Icons.category),
             label: '分类',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.search),
-            label: '搜索',
-          ),
+          NavigationDestination(icon: Icon(Icons.search), label: '搜索'),
           NavigationDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),

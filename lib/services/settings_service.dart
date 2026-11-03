@@ -2,6 +2,8 @@ import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'download_filename.dart';
+
 /// 应用设置：主题模式 / 主题色 / 默认音质 / baseInfo 版本，
 /// 持久化到 SharedPreferences。访客态应用，无账号相关设置。
 class SettingsService extends ChangeNotifier {
@@ -12,6 +14,7 @@ class SettingsService extends ChangeNotifier {
   static const _keyCustomColors = 'custom_colors';
   static const _keyDefaultQuality = 'default_quality';
   static const _keyBaseInfoV4 = 'baseinfo_v4';
+  static const _keyDownloadFileNameFormat = 'download_filename_format';
 
   /// 预设主题色
   static const List<ThemePreset> themePresets = [
@@ -74,6 +77,10 @@ class SettingsService extends ChangeNotifier {
   bool _baseInfoV4 = false;
   bool get baseInfoV4 => _baseInfoV4;
 
+  /// 下载文件名模板（变量见 DownloadFileNameFormatter），只影响新下载
+  String _downloadFileNameFormat = DownloadFileNameFormatter.defaultFormat;
+  String get downloadFileNameFormat => _downloadFileNameFormat;
+
   SettingsService();
 
   Future<void> init() async {
@@ -88,6 +95,9 @@ class SettingsService extends ChangeNotifier {
         _prefs.getStringList(_keyCustomColors)?.map(int.parse).toList() ?? [];
     _defaultQuality = (_prefs.getInt(_keyDefaultQuality) ?? 1).clamp(0, 3);
     _baseInfoV4 = _prefs.getBool(_keyBaseInfoV4) ?? false;
+    _downloadFileNameFormat =
+        _prefs.getString(_keyDownloadFileNameFormat) ??
+        DownloadFileNameFormatter.defaultFormat;
   }
 
   /// 通过系统 CorePalette 取种子色，M3 明暗主题分别用 fromSeed 生成
@@ -120,7 +130,9 @@ class SettingsService extends ChangeNotifier {
     if (_customColors.contains(value)) return;
     _customColors = [..._customColors, value];
     await _prefs.setStringList(
-        _keyCustomColors, _customColors.map((e) => e.toString()).toList());
+      _keyCustomColors,
+      _customColors.map((e) => e.toString()).toList(),
+    );
     notifyListeners();
   }
 
@@ -128,7 +140,9 @@ class SettingsService extends ChangeNotifier {
     if (!_customColors.contains(value)) return;
     _customColors = _customColors.where((e) => e != value).toList();
     await _prefs.setStringList(
-        _keyCustomColors, _customColors.map((e) => e.toString()).toList());
+      _keyCustomColors,
+      _customColors.map((e) => e.toString()).toList(),
+    );
     if (_themeSeed == value) {
       await setThemeSeed(defaultThemeSeed);
       return;
@@ -141,6 +155,14 @@ class SettingsService extends ChangeNotifier {
     if (value == _defaultQuality) return;
     _defaultQuality = value;
     await _prefs.setInt(_keyDefaultQuality, value);
+    notifyListeners();
+  }
+
+  Future<void> setDownloadFileNameFormat(String value) async {
+    value = value.trim();
+    if (value.isEmpty || value == _downloadFileNameFormat) return;
+    _downloadFileNameFormat = value;
+    await _prefs.setString(_keyDownloadFileNameFormat, value);
     notifyListeners();
   }
 

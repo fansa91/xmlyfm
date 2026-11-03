@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/models.dart';
+import 'download_service.dart';
 import 'library_service.dart';
 import 'play_resolver.dart';
 import 'settings_service.dart';
@@ -23,6 +24,10 @@ class PlayerService extends ChangeNotifier {
   final PlayResolver resolver;
   final SettingsService settings;
   final LibraryService library;
+
+  /// 下载服务（main 接线时注入）：起播时已下载完成的集优先播本地文件
+  DownloadService? downloads;
+
   final AudioPlayer _player = AudioPlayer();
   final Random _random = Random();
 
@@ -92,8 +97,7 @@ class PlayerService extends ChangeNotifier {
         final now = DateTime.now();
         if (now.difference(_lastProgressSave) >= _progressSaveInterval) {
           _lastProgressSave = now;
-          unawaited(
-              library.saveProgress(t.trackId, pos, total: _duration));
+          unawaited(library.saveProgress(t.trackId, pos, total: _duration));
         }
       }
       notifyListeners();
@@ -135,11 +139,11 @@ class PlayerService extends ChangeNotifier {
   Stream<Duration> get positionStream => _player.onPositionChanged;
 
   String get modeLabel => switch (mode) {
-        PlayMode.sequence => '顺序播放',
-        PlayMode.loop => '列表循环',
-        PlayMode.single => '单集循环',
-        PlayMode.shuffle => '随机播放',
-      };
+    PlayMode.sequence => '顺序播放',
+    PlayMode.loop => '列表循环',
+    PlayMode.single => '单集循环',
+    PlayMode.shuffle => '随机播放',
+  };
 
   // ---------- 队列控制 ----------
 
@@ -202,6 +206,25 @@ class PlayerService extends ChangeNotifier {
         }
         notifyListeners();
 
+        // 本地优先：已下载完成的集直接播本地文件（断网可播）
+        final localPath = downloads?.localPathFor(track.trackId);
+        if (localPath != null) {
+          const localResult = PlayResult();
+          currentResult = localResult;
+          try {
+            await _player.setPlaybackRate(_speed);
+            await _player.play(DeviceFileSource(localPath));
+            await _resumeSavedPosition(track, localResult);
+            errorMessage = null;
+            notifyListeners();
+            library.addHistory(track);
+            _prefetchNext(n);
+            return;
+          } catch (_) {
+            // 本地文件损坏等：回落到下面的网络解析
+          }
+        }
+
         PlayResult result;
         try {
           result = await _resolveTrack(track);
@@ -227,20 +250,7 @@ class PlayerService extends ChangeNotifier {
         try {
           await _player.setPlaybackRate(_speed);
           await _player.play(UrlSource(result.url!));
-          // 续播：跳回上次保存的位置（开头 5 秒内、贴近结尾、试听已达
-          // 上限时不跳，避免刚播完的又被拉回去）
-          final saved = library.savedPosition(track.trackId);
-          if (saved != null && saved.inSeconds > 5) {
-            final beyondSample = result.isSample &&
-                result.sampleDuration > 0 &&
-                saved.inSeconds >= result.sampleDuration;
-            final nearEnd =
-                track.duration > 0 && saved.inSeconds >= track.duration - 10;
-            if (!beyondSample && !nearEnd) {
-              await _player.seek(saved);
-              _position = saved;
-            }
-          }
+          await _resumeSavedPosition(track, result);
           errorMessage = null;
           notifyListeners();
           library.addHistory(track);
@@ -259,6 +269,22 @@ class PlayerService extends ChangeNotifier {
     } finally {
       _busy = false;
     }
+  }
+
+  /// 续播：跳回上次保存的位置（开头 5 秒内、贴近结尾、试听已达
+  /// 上限时不跳，避免刚播完的又被拉回去）
+  Future<void> _resumeSavedPosition(Track track, PlayResult result) async {
+    final saved = library.savedPosition(track.trackId);
+    if (saved == null || saved.inSeconds <= 5) return;
+    final beyondSample =
+        result.isSample &&
+        result.sampleDuration > 0 &&
+        saved.inSeconds >= result.sampleDuration;
+    final nearEnd =
+        track.duration > 0 && saved.inSeconds >= track.duration - 10;
+    if (beyondSample || nearEnd) return;
+    await _player.seek(saved);
+    _position = saved;
   }
 
   Future<PlayResult> _resolveTrack(Track track) async {
@@ -367,6 +393,11 @@ class PlayerService extends ChangeNotifier {
     final wasPlaying = _playing;
     final pos = _position;
     await settings.setDefaultQuality(level);
+    // 当前曲目播的是本地下载文件：音质切换不影响本地播放
+    if (track != null && downloads?.localPathFor(track.trackId) != null) {
+      notifyListeners();
+      return;
+    }
     if (track == null) {
       notifyListeners();
       return;

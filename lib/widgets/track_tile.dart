@@ -21,10 +21,7 @@ class MiniBadge extends StatelessWidget {
         border: Border.all(color: c, width: 0.7),
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Text(
-        text,
-        style: TextStyle(fontSize: 10, color: c, height: 1.2),
-      ),
+      child: Text(text, style: TextStyle(fontSize: 10, color: c, height: 1.2)),
     );
   }
 }
@@ -35,12 +32,26 @@ class TrackTile extends StatelessWidget {
   final Track track;
   final int? indexLabel;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+
+  /// 覆盖默认 leading（如多选模式的复选框）
+  final Widget? leading;
+
+  /// 覆盖默认 trailing（如下载状态按钮）
+  final Widget? trailing;
+
+  /// 选中态（多选模式高亮，走 ListTile 原生 selected 配色）
+  final bool selected;
 
   const TrackTile({
     super.key,
     required this.track,
     this.indexLabel,
     this.onTap,
+    this.onLongPress,
+    this.leading,
+    this.trailing,
+    this.selected = false,
   });
 
   @override
@@ -52,24 +63,29 @@ class TrackTile extends StatelessWidget {
 
     return ListTile(
       onTap: onTap,
-      leading: SizedBox(
-        width: 36,
-        child: Center(
-          child: isCurrent
-              ? Icon(
-                  isPlayingThis ? Icons.graphic_eq : Icons.play_arrow,
-                  color: theme.colorScheme.primary,
-                  size: 20,
-                )
-              : Text(
-                  indexLabel != null ? '$indexLabel' : '',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-        ),
-      ),
+      onLongPress: onLongPress,
+      selected: selected,
+      selectedTileColor: theme.colorScheme.secondaryContainer,
+      leading:
+          leading ??
+          SizedBox(
+            width: 36,
+            child: Center(
+              child: isCurrent
+                  ? Icon(
+                      isPlayingThis ? Icons.graphic_eq : Icons.play_arrow,
+                      color: theme.colorScheme.primary,
+                      size: 20,
+                    )
+                  : Text(
+                      indexLabel != null ? '$indexLabel' : '',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+            ),
+          ),
       title: Text(
         track.title,
         maxLines: 2,
@@ -84,22 +100,32 @@ class TrackTile extends StatelessWidget {
         padding: const EdgeInsets.only(top: 4),
         child: Row(
           children: [
-            Icon(Icons.play_circle_outline,
-                size: 13, color: theme.colorScheme.onSurfaceVariant),
+            Icon(
+              Icons.play_circle_outline,
+              size: 13,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(width: 3),
             Text(
               formatPlayCount(track.playtimes),
               style: TextStyle(
-                  fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
+                fontSize: 12,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(width: 10),
-            Icon(Icons.schedule,
-                size: 13, color: theme.colorScheme.onSurfaceVariant),
+            Icon(
+              Icons.schedule,
+              size: 13,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(width: 3),
             Text(
               formatSeconds(track.duration),
               style: TextStyle(
-                  fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
+                fontSize: 12,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(width: 8),
             if (track.isChargeTrack) ...[
@@ -107,18 +133,22 @@ class TrackTile extends StatelessWidget {
               const SizedBox(width: 6),
             ],
             if (track.isChargeTrack && track.sampleDuration > 0)
-              MiniBadge('试听 ${track.sampleDuration} 秒',
-                  color: theme.colorScheme.tertiary),
+              MiniBadge(
+                '试听 ${track.sampleDuration} 秒',
+                color: theme.colorScheme.tertiary,
+              ),
           ],
         ),
       ),
-      trailing: isCurrent
-          ? IconButton(
-              icon: Icon(isPlayingThis ? Icons.pause : Icons.play_arrow),
-              color: theme.colorScheme.primary,
-              onPressed: () => player.toggle(),
-            )
-          : null,
+      trailing:
+          trailing ??
+          (isCurrent
+              ? IconButton(
+                  icon: Icon(isPlayingThis ? Icons.pause : Icons.play_arrow),
+                  color: theme.colorScheme.primary,
+                  onPressed: () => player.toggle(),
+                )
+              : null),
     );
   }
 }

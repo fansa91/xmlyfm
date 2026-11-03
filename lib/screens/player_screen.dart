@@ -6,6 +6,7 @@ import '../models/models.dart';
 import '../services/library_service.dart';
 import '../services/player_service.dart';
 import '../widgets/cover_image.dart';
+import '../widgets/download_button.dart';
 
 /// 全屏播放页：封面、标题、进度（试听上限截断）、上一首/下一首、
 /// 倍速、定时关闭、音质切换 chips（0/1/2/3 标准/高清/臻品/无损）、播放模式。
@@ -35,6 +36,14 @@ class PlayerScreen extends StatelessWidget {
               ),
               tooltip: '收藏声音',
               onPressed: () => library.toggleFavoriteTrack(track),
+            ),
+          if (track != null)
+            // 播放页不知所属专辑名/集序号，文件名 {album}/{index} 走服务内回落
+            TrackDownloadButton(
+              track: track,
+              albumTitle: '',
+              index: 0,
+              compact: true,
             ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.timer_outlined),
@@ -71,21 +80,26 @@ class PlayerScreen extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                        fontSize: 19, fontWeight: FontWeight.bold, height: 1.3),
+                      fontSize: 19,
+                      fontWeight: FontWeight.bold,
+                      height: 1.3,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     track.nickname,
                     style: TextStyle(
-                        fontSize: 14,
-                        color: theme.colorScheme.onSurfaceVariant),
+                      fontSize: 14,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                   if (player.sleepAt != null) ...[
                     const SizedBox(height: 8),
                     Chip(
                       avatar: const Icon(Icons.timer, size: 16),
                       label: Text(
-                          '定时关闭：${player.sleepAt!.difference(DateTime.now()).inMinutes + 1} 分钟内'),
+                        '定时关闭：${player.sleepAt!.difference(DateTime.now()).inMinutes + 1} 分钟内',
+                      ),
                       visualDensity: VisualDensity.compact,
                     ),
                   ],
@@ -96,7 +110,9 @@ class PlayerScreen extends StatelessWidget {
                       player.errorMessage!,
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                          color: theme.colorScheme.error, fontSize: 13),
+                        color: theme.colorScheme.error,
+                        fontSize: 13,
+                      ),
                     ),
                     const SizedBox(height: 8),
                   ],
@@ -125,11 +141,12 @@ class PlayerScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
-        result?.notice ??
-            '付费内容，仅支持试听 ${result?.sampleDuration ?? 0} 秒',
+        result?.notice ?? '付费内容，仅支持试听 ${result?.sampleDuration ?? 0} 秒',
         textAlign: TextAlign.center,
         style: TextStyle(
-            fontSize: 12.5, color: theme.colorScheme.onTertiaryContainer),
+          fontSize: 12.5,
+          color: theme.colorScheme.onTertiaryContainer,
+        ),
       ),
     );
   }
@@ -154,8 +171,10 @@ class PlayerScreen extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(formatDuration(player.position),
-                  style: const TextStyle(fontSize: 12)),
+              Text(
+                formatDuration(player.position),
+                style: const TextStyle(fontSize: 12),
+              ),
               Text(
                 duration != null ? formatDuration(duration) : '--:--',
                 style: const TextStyle(fontSize: 12),
@@ -199,11 +218,11 @@ class PlayerScreen extends StatelessWidget {
   }
 
   IconData _modeIcon(PlayMode mode) => switch (mode) {
-        PlayMode.sequence => Icons.arrow_right_alt,
-        PlayMode.loop => Icons.repeat,
-        PlayMode.single => Icons.repeat_one,
-        PlayMode.shuffle => Icons.shuffle,
-      };
+    PlayMode.sequence => Icons.arrow_right_alt,
+    PlayMode.loop => Icons.repeat,
+    PlayMode.single => Icons.repeat_one,
+    PlayMode.shuffle => Icons.shuffle,
+  };
 
   Widget _buildExtraRow(BuildContext context, PlayerService player) {
     return Row(
@@ -215,10 +234,7 @@ class PlayerScreen extends StatelessWidget {
           value: player.speed,
           underline: const SizedBox.shrink(),
           items: const [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0]
-              .map((s) => DropdownMenuItem(
-                    value: s,
-                    child: Text('${s}x'),
-                  ))
+              .map((s) => DropdownMenuItem(value: s, child: Text('${s}x')))
               .toList(),
           onChanged: (v) {
             if (v != null) player.setSpeed(v);
@@ -238,8 +254,10 @@ class PlayerScreen extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(right: 6),
             child: ChoiceChip(
-              label:
-                  Text(Quality.nameOf(level), style: const TextStyle(fontSize: 12)),
+              label: Text(
+                Quality.nameOf(level),
+                style: const TextStyle(fontSize: 12),
+              ),
               selected: player.quality == level,
               onSelected: (_) => player.setQuality(level),
             ),
@@ -260,9 +278,13 @@ class PlayerScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   children: [
-                    Text('播放队列（${player.queue.length}）',
-                        style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold)),
+                    Text(
+                      '播放队列（${player.queue.length}）',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const Spacer(),
                     TextButton(
                       onPressed: () {
@@ -284,9 +306,10 @@ class PlayerScreen extends StatelessWidget {
                     return ListTile(
                       dense: true,
                       leading: isCurrent
-                          ? Icon(Icons.play_arrow,
-                              color:
-                                  Theme.of(context).colorScheme.primary)
+                          ? Icon(
+                              Icons.play_arrow,
+                              color: Theme.of(context).colorScheme.primary,
+                            )
                           : Text('${i + 1}'),
                       title: Text(
                         t.title,

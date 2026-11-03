@@ -51,6 +51,19 @@ String formatSeconds(int seconds) {
 /// Duration -> m:ss / h:mm:ss
 String formatDuration(Duration d) => formatSeconds(d.inSeconds);
 
+/// 字节数格式化：1024 -> 1.0 KB
+String formatBytes(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  const units = ['KB', 'MB', 'GB'];
+  var value = bytes / 1024;
+  var unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  return '${value.toStringAsFixed(1)} ${units[unit]}';
+}
+
 String formatDate(int msEpoch) {
   if (msEpoch <= 0) return '';
   final dt = DateTime.fromMillisecondsSinceEpoch(msEpoch);
