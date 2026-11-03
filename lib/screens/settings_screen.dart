@@ -11,6 +11,17 @@ import 'download_directory_dialog.dart';
 import 'download_format_dialog.dart';
 import 'theme_settings_screen.dart';
 
+/// 「下载格式」选项的展示名
+String _downloadFormatName(String value) =>
+    value == SettingsService.downloadFormatQuality ? '音质优先' : 'MP3 优先';
+
+/// 「下载格式」选项的说明（设置行副标题与菜单项共用）
+String _downloadFormatDesc(String value) =>
+    value == SettingsService.downloadFormatQuality
+    ? '音质更好，但 M4A 文件无法写入标签。'
+          '播放音质设为无损时将下载无损原文件（体积明显更大、不写标签）'
+    : '可写入文件标签';
+
 /// 设置页：默认音质、baseInfo v4 切换、主题入口、关于。
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -76,6 +87,49 @@ class SettingsScreen extends StatelessWidget {
                       .textTheme
                       .titleMedium
                       ?.copyWith(fontWeight: FontWeight.bold)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.audio_file_outlined),
+              title: const Text('下载格式'),
+              subtitle: Text(_downloadFormatDesc(settings.downloadFormat)),
+              trailing: MenuAnchor(
+                builder: (context, controller, _) => TextButton(
+                  onPressed: () => controller.isOpen
+                      ? controller.close()
+                      : controller.open(),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(_downloadFormatName(settings.downloadFormat)),
+                      const Icon(Icons.arrow_drop_down, size: 20),
+                    ],
+                  ),
+                ),
+                menuChildren: [
+                  for (final format in const [
+                    SettingsService.downloadFormatMp3,
+                    SettingsService.downloadFormatQuality,
+                  ])
+                    MenuItemButton(
+                      leadingIcon: Icon(
+                        format == settings.downloadFormat ? Icons.check : null,
+                        size: 18,
+                      ),
+                      onPressed: () => settings.setDownloadFormat(format),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(_downloadFormatName(format)),
+                          Text(
+                            _downloadFormatDesc(format),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
             ),
             ListTile(
               leading: const Icon(Icons.drive_file_rename_outline),

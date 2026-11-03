@@ -350,6 +350,19 @@ class DownloadService extends ChangeNotifier {
 
   // ---------- 入队 ----------
 
+  /// 按「下载格式」设置选解析路径：MP3 优先走下载专用解析
+  /// [PlayResolver.resolveForDownload]（优先 MP3 直链，能写文件标签）；
+  /// 音质优先走常规 [PlayResolver.resolve]（按默认音质取链，多为 M4A，
+  /// 无法写入标签）。只在入队与每次开跑重解析时现读设置，已入队/
+  /// 已完成任务不受之后改设置的影响。付费试听拦截两条路径都保持。
+  Future<PlayResult> _resolveForDownload(Track track) {
+    final quality = settings.defaultQuality;
+    if (settings.downloadFormat == SettingsService.downloadFormatQuality) {
+      return resolver.resolve(track, quality: quality);
+    }
+    return resolver.resolveForDownload(track, quality: quality);
+  }
+
   /// 单集入队。返回 null 表示成功；返回字符串为失败原因（供 UI 弹提示）。
   Future<String?> enqueueTrack(
     Track track, {
@@ -378,14 +391,11 @@ class DownloadService extends ChangeNotifier {
     final dir = _dir;
     if (dir == null) return '下载目录未就绪';
 
-    // 先解析（下载专用解析：优先 mp3 直链，保证下回来能写 ID3 标签）：
-    // 试听/无地址直接拒绝，不建任务
+    // 先按「下载格式」设置解析（默认 MP3 优先，下回来能写 ID3 标签；
+    // 音质优先则按默认音质取链）：试听/无地址直接拒绝，不建任务
     final String url;
     try {
-      final result = await resolver.resolveForDownload(
-        track,
-        quality: settings.defaultQuality,
-      );
+      final result = await _resolveForDownload(track);
       if (result.isSample) return '付费内容仅支持试听，无法下载';
       if (result.url == null || result.url!.isEmpty) {
         return result.notice ?? '无法获取下载地址';
@@ -412,6 +422,17 @@ class DownloadService extends ChangeNotifier {
     return null;
   }
 
+  /// 下载落盘用的扩展名：以 [DownloadFileNameFormatter.extensionForUrl]
+  /// 为准，但 `.fhq`（无损条目的非标准后缀）保留原后缀——
+  /// extensionForUrl 对未知后缀回落 .mp3，会把无损文件误标成 mp3
+  /// 还误触 ID3 写入。无损的真实容器以下载完成后的文件头嗅探为准
+  /// （魔数 fLaC 才改名 .flac，见 [_sniffAndRenameFlac]）。
+  static String _downloadExtensionForUrl(String url) {
+    final path = Uri.tryParse(url)?.path ?? url;
+    if (path.toLowerCase().endsWith('.fhq')) return '.fhq';
+    return DownloadFileNameFormatter.extensionForUrl(url);
+  }
+
   /// 按文件名模板与去重规则组装一个待下载任务。
   DownloadTask _buildTask(
     Track track, {
@@ -434,7 +455,7 @@ class DownloadService extends ChangeNotifier {
       trackId: track.trackId,
       author: track.nickname,
     );
-    final ext = DownloadFileNameFormatter.extensionForUrl(url);
+    final ext = _downloadExtensionForUrl(url);
     final taken = _tasks.map((t) => t.fileName).toSet();
     final fileName = DownloadFileNameFormatter.uniqueName(
       base,
@@ -467,7 +488,7 @@ class DownloadService extends ChangeNotifier {
   /// （只有 .mp3 写 ID3）。扩展名变化时换名落盘；旧路径上未完成
   /// 任务只会留半截文件，一并清掉免成孤儿。
   Future<void> _alignFileExtension(DownloadTask task, String url) async {
-    final ext = DownloadFileNameFormatter.extensionForUrl(url);
+    final ext = _downloadExtensionForUrl(url);
     if (p.extension(task.fileName).toLowerCase() == ext) return;
     final oldPath = task.filePath;
     final dirPath = p.dirname(oldPath);
@@ -618,13 +639,10 @@ class DownloadService extends ChangeNotifier {
 
     var file = File(task.filePath);
     try {
-      // 每次开跑都重新解析地址（直链可能过期；下载专用解析优先 mp3）；
-      // 试听会在这里再次被拦
+      // 每次开跑都重新解析地址（直链可能过期；解析路径同样按
+      // 「下载格式」设置选）；试听会在这里再次被拦
       final track = task.toTrack();
-      final result = await resolver.resolveForDownload(
-        track,
-        quality: settings.defaultQuality,
-      );
+      final result = await _resolveForDownload(track);
       if (result.isSample) {
         throw const XmException('付费内容仅支持试听，无法下载');
       }
@@ -667,8 +685,17 @@ class DownloadService extends ChangeNotifier {
       }
       task.fileSize = await file.length();
       task.downloadedBytes = task.fileSize;
-      // 落盘后把标签写进文件本体（失败不影响完成状态，见 _tagCompletedFile）
-      await _tagCompletedFile(task);
+      // 无损嗅探：内容是 FLAC 时先按 .flac 改名落盘（不转码），且不写
+      // 标签（ID3 写入器只认 mp3；FLAC 的 Vorbis Comment 本轮不做，
+      // tagged 保持 false，下载管理按「未写标签 · 格式不支持」展示）
+      final isFlac = await _sniffAndRenameFlac(task, file);
+      file = File(task.filePath);
+      if (isFlac) {
+        task.tagged = false;
+      } else {
+        // 落盘后把标签写进文件本体（失败不影响完成状态，见 _tagCompletedFile）
+        await _tagCompletedFile(task);
+      }
       // 写标签走的是临时文件替换：期间任务可能被 remove（清孤儿文件），
       // 文件也可能被外部动过。复检通过才置完成，文件没了置失败可重试。
       if (!_tasks.any((t) => t.trackId == task.trackId)) {
@@ -706,6 +733,53 @@ class DownloadService extends ChangeNotifier {
       notifyListeners();
       _pump();
     }
+  }
+
+  /// 嗅探已落盘文件的文件头：内容是 FLAC（魔数 `fLaC`）且当前扩展名
+  /// 不是 .flac 时，把文件改名为 .flac（同步任务记录的 fileName/
+  /// filePath，命名冲突走既有去重规则）。无损 URL 的后缀不可靠
+  /// （§5.8：playPathHq 实测是 .m4a 容器、baseInfo fhq 条目后缀未取得
+  /// 一手证据），故真实容器只认文件头；不做任何转码。
+  ///
+  /// 返回是否为 FLAC 内容（改名失败也算，调用方据此跳过写标签）；
+  /// 读不到文件头/魔数不符返回 false，保留原后缀原样处理。
+  Future<bool> _sniffAndRenameFlac(DownloadTask task, File file) async {
+    try {
+      final raf = await file.open();
+      final head = await raf.read(4);
+      await raf.close();
+      if (head.length < 4 ||
+          head[0] != 0x66 || // f
+          head[1] != 0x4C || // L
+          head[2] != 0x61 || // a
+          head[3] != 0x43) {
+        // C
+        return false;
+      }
+    } catch (_) {
+      return false;
+    }
+    if (p.extension(task.fileName).toLowerCase() == '.flac') return true;
+    final dirPath = p.dirname(task.filePath);
+    final taken = _tasks
+        .where((t) => t.trackId != task.trackId)
+        .map((t) => t.fileName)
+        .toSet();
+    final newName = DownloadFileNameFormatter.uniqueName(
+      p.basenameWithoutExtension(task.fileName),
+      '.flac',
+      (candidate) =>
+          taken.contains(candidate) ||
+          File(p.join(dirPath, candidate)).existsSync(),
+    );
+    try {
+      await file.rename(p.join(dirPath, newName));
+      task.fileName = newName;
+      task.filePath = p.join(dirPath, newName);
+    } catch (_) {
+      // 改名失败保留原路径；仍按 FLAC 内容对待（不写标签）
+    }
+    return true;
   }
 
   // ---------- 标签写入 ----------

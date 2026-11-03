@@ -18,6 +18,7 @@ class SettingsService extends ChangeNotifier {
   static const _keyDefaultQuality = 'default_quality';
   static const _keyBaseInfoV4 = 'baseinfo_v4';
   static const _keyDownloadFileNameFormat = 'download_filename_format';
+  static const _keyDownloadFormat = 'download_format';
   static const _keyDownloadDirectory = 'download_directory';
   static const _keyDeviceId = 'device_id';
 
@@ -86,6 +87,21 @@ class SettingsService extends ChangeNotifier {
   String _downloadFileNameFormat = DownloadFileNameFormatter.defaultFormat;
   String get downloadFileNameFormat => _downloadFileNameFormat;
 
+  /// 下载格式取值：MP3 优先（可写入文件标签）
+  static const String downloadFormatMp3 = 'mp3';
+
+  /// 下载格式取值：音质优先（按默认音质取链，多为 M4A，无法写入标签）
+  static const String downloadFormatQuality = 'quality';
+
+  /// 下载格式（见 [downloadFormatMp3] / [downloadFormatQuality]），
+  /// 默认 MP3 优先；只影响之后新入队与重跑的解析，已入队/已完成任务不变。
+  String _downloadFormat = downloadFormatMp3;
+  String get downloadFormat => _downloadFormat;
+
+  /// 存量/外部写入的非法格式值一律回落到默认（MP3 优先）
+  static String sanitizeDownloadFormat(String? value) =>
+      value == downloadFormatQuality ? downloadFormatQuality : downloadFormatMp3;
+
   /// 自定义下载目录（空 = 用默认的应用文档目录 downloads/）。
   /// 只影响之后的新下载，不搬移已下载文件；iOS 不开放此设置（见下）。
   String _downloadDirectory = '';
@@ -123,6 +139,9 @@ class SettingsService extends ChangeNotifier {
     _downloadFileNameFormat =
         _prefs.getString(_keyDownloadFileNameFormat) ??
         DownloadFileNameFormatter.defaultFormat;
+    _downloadFormat = sanitizeDownloadFormat(
+      _prefs.getString(_keyDownloadFormat),
+    );
     _downloadDirectory = _prefs.getString(_keyDownloadDirectory) ?? '';
     _deviceId = _prefs.getString(_keyDeviceId) ?? '';
     if (_deviceId.isEmpty) {
@@ -218,6 +237,16 @@ class SettingsService extends ChangeNotifier {
     if (value.isEmpty || value == _downloadFileNameFormat) return;
     _downloadFileNameFormat = value;
     await _prefs.setString(_keyDownloadFileNameFormat, value);
+    notifyListeners();
+  }
+
+  /// 设置下载格式（[downloadFormatMp3] / [downloadFormatQuality]，
+  /// 非法值回落默认 MP3 优先）。
+  Future<void> setDownloadFormat(String value) async {
+    value = sanitizeDownloadFormat(value);
+    if (value == _downloadFormat) return;
+    _downloadFormat = value;
+    await _prefs.setString(_keyDownloadFormat, value);
     notifyListeners();
   }
 
