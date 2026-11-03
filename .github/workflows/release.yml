@@ -79,7 +79,7 @@ jobs:
   # ---------------- iOS ----------------
   ios:
     name: iOS IPA (unsigned)
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
@@ -122,7 +122,7 @@ jobs:
   # ---------------- macOS ----------------
   macos:
     name: macOS DMG
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
