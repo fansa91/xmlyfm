@@ -201,6 +201,9 @@ class _AlbumScreenState extends State<AlbumScreen> {
       targets,
       albumTitle: _album?.title ?? '',
       indexOf: (t) => _episodeIndex(_tracks.indexOf(t)),
+      albumIntro: _album?.intro ?? '',
+      albumCategory: _album?.categoryName ?? '',
+      albumTotal: _totalCount,
     );
     _snack(ok > 0 ? '已加入下载队列 $ok 集' : (err ?? '无法下载'));
   }
@@ -216,6 +219,9 @@ class _AlbumScreenState extends State<AlbumScreen> {
       targets,
       albumTitle: _album?.title ?? '',
       indexOf: (t) => _episodeIndex(_tracks.indexOf(t)),
+      albumIntro: _album?.intro ?? '',
+      albumCategory: _album?.categoryName ?? '',
+      albumTotal: _totalCount,
     );
     _snack(ok > 0 ? '已加入下载队列 $ok 集' : (err ?? '无法下载'));
   }
@@ -539,6 +545,9 @@ class _AlbumScreenState extends State<AlbumScreen> {
         track: track,
         albumTitle: albumTitle,
         index: index,
+        albumIntro: _album?.intro ?? '',
+        albumCategory: _album?.categoryName ?? '',
+        albumTotal: _totalCount,
       ),
     );
   }

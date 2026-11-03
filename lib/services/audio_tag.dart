@@ -1,22 +1,38 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-/// 要写入音频文件的标签数据（下载完成时由 DownloadTask 的字段组装）。
+/// 要写入音频文件的标签数据（下载完成时由 DownloadTask/Track 字段组装）。
+/// 可选字段为空/0 时不写对应帧——拿不到的元信息宁可缺省，不编造。
 class AudioTagData {
   final String title; // TIT2 声音标题
   final String album; // TALB 专辑名
   final String artist; // TPE1 主播名
   final int trackNumber; // TRCK 集序号（<=0 时不写）
+  final int totalTracks; // TRCK 总集数（>0 时写成「序号/总集数」）
   final Uint8List? coverBytes; // APIC 封面图字节（null 时不写封面）
   final String coverMime; // 封面 MIME，如 image/jpeg
+  final String description; // COMM 专辑简介
+  final String genre; // TCON 分类名
+  final String releaseDate; // TDRC 发布日期（yyyy-MM-dd，已格式化）
+  final int durationMs; // TLEN 时长（毫秒，<=0 时不写）
+
+  /// TXXX 自定义帧（键→值）：标准帧没有对应项的元信息，如声音/专辑 ID、
+  /// 播放量、来源标记、付费标记。空列表不写。
+  final List<(String, String)> custom;
 
   const AudioTagData({
     required this.title,
     required this.album,
     required this.artist,
     this.trackNumber = 0,
+    this.totalTracks = 0,
     this.coverBytes,
     this.coverMime = 'image/jpeg',
+    this.description = '',
+    this.genre = '',
+    this.releaseDate = '',
+    this.durationMs = 0,
+    this.custom = const [],
   });
 }
 
@@ -24,7 +40,8 @@ class AudioTagData {
 ///
 /// 选型说明：pub.dev 的 id3tag 包只读且 SDK 约束 <3.0 与本工程不兼容，
 /// 其余候选或年久失修或走原生通道，故按 ID3v2.3 规格手写：
-/// - 文本帧 TIT2/TALB/TPE1/TRCK 用 UTF-16LE+BOM（编码 0x01），中文安全；
+/// - 文本帧 TIT2/TALB/TPE1/TRCK/TCON/TDRC/TLEN 用 UTF-16LE+BOM
+///   （编码 0x01），中文安全；COMM 写简介、TXXX 写标准帧没有的元信息；
 /// - APIC 帧写封面（picture type 0x03 主封面）；
 /// - 文件已有 ID3v2 标签时按头里的 syncsafe 尺寸整段剥离后重写，
 ///   只保留一个标签头，不叠加；
@@ -67,7 +84,37 @@ class AudioTagWriter {
     textFrame('TALB', data.album);
     textFrame('TPE1', data.artist);
     if (data.trackNumber > 0) {
-      textFrame('TRCK', '${data.trackNumber}');
+      textFrame(
+        'TRCK',
+        data.totalTracks > 0
+            ? '${data.trackNumber}/${data.totalTracks}'
+            : '${data.trackNumber}',
+      );
+    }
+    textFrame('TCON', data.genre);
+    textFrame('TDRC', data.releaseDate);
+    if (data.durationMs > 0) {
+      textFrame('TLEN', '${data.durationMs}');
+    }
+    if (data.description.isNotEmpty) {
+      // COMM：编码(0x01) + 语言(eng) + 描述（空，UTF-16 BOM + 终止符）+ 正文
+      final payload = BytesBuilder(copy: false)
+        ..addByte(0x01)
+        ..add(_latin1('eng'))
+        ..add(_utf16WithBom(''))
+        ..add([0x00, 0x00])
+        ..add(_utf16WithBom(data.description));
+      frames.add(_frame('COMM', payload.toBytes()));
+    }
+    for (final (key, value) in data.custom) {
+      if (key.isEmpty || value.isEmpty) continue;
+      // TXXX：编码(0x01) + 键（UTF-16 BOM + 终止符）+ 值
+      final payload = BytesBuilder(copy: false)
+        ..addByte(0x01)
+        ..add(_utf16WithBom(key))
+        ..add([0x00, 0x00])
+        ..add(_utf16WithBom(value));
+      frames.add(_frame('TXXX', payload.toBytes()));
     }
     final cover = data.coverBytes;
     if (cover != null && cover.isNotEmpty) {
@@ -215,17 +262,25 @@ class AudioTagWriter {
     return out;
   }
 
+  /// UTF-16LE 带 BOM 的原始字节（不含编码前缀字节）。
+  static Uint8List _utf16WithBom(String text) {
+    final units = text.codeUnits;
+    final out = Uint8List(2 + units.length * 2);
+    out[0] = 0xFF; // BOM LE
+    out[1] = 0xFE;
+    for (var i = 0; i < units.length; i++) {
+      out[2 + i * 2] = units[i] & 0xFF;
+      out[3 + i * 2] = (units[i] >> 8) & 0xFF;
+    }
+    return out;
+  }
+
   /// ID3v2.3 文本帧 payload：编码字节 0x01 + BOM + UTF-16LE 码元。
   static Uint8List _encodeText(String text) {
-    final units = text.codeUnits;
-    final out = Uint8List(1 + 2 + units.length * 2);
+    final body = _utf16WithBom(text);
+    final out = Uint8List(1 + body.length);
     out[0] = 0x01;
-    out[1] = 0xFF; // BOM LE
-    out[2] = 0xFE;
-    for (var i = 0; i < units.length; i++) {
-      out[3 + i * 2] = units[i] & 0xFF;
-      out[4 + i * 2] = (units[i] >> 8) & 0xFF;
-    }
+    out.setRange(1, out.length, body);
     return out;
   }
 

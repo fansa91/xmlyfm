@@ -27,6 +27,9 @@ class DownloadTask {
   final String cover;
   final int duration; // 秒
   final int index; // 专辑内集序号（从 1 起）
+  final String intro; // 专辑简介（入队时从专辑页带入，写 COMM 用；可空）
+  final String categoryName; // 专辑分类名（写 TCON 用；可空）
+  final int albumTotal; // 专辑总集数（TRCK 写「序号/总集数」用；0=未知）
 
   /// 入队时那条 Track 的完整 JSON：重下时据此重新走 PlayResolver
   /// （保住列表直带 URL 与付费标记，不因只存展示字段而丢）
@@ -59,6 +62,9 @@ class DownloadTask {
     required this.cover,
     required this.duration,
     required this.index,
+    this.intro = '',
+    this.categoryName = '',
+    this.albumTotal = 0,
     this.trackJson = '',
     required this.fileName,
     required this.filePath,
@@ -104,6 +110,9 @@ class DownloadTask {
     'cover': cover,
     'duration': duration,
     'index': index,
+    'intro': intro,
+    'categoryName': categoryName,
+    'albumTotal': albumTotal,
     'trackJson': trackJson,
     'fileName': fileName,
     'fileSize': fileSize,
@@ -128,6 +137,9 @@ class DownloadTask {
       cover: json['cover'] as String? ?? '',
       duration: json['duration'] as int? ?? 0,
       index: json['index'] as int? ?? 0,
+      intro: json['intro'] as String? ?? '',
+      categoryName: json['categoryName'] as String? ?? '',
+      albumTotal: json['albumTotal'] as int? ?? 0,
       trackJson: json['trackJson'] as String? ?? '',
       fileName: json['fileName'] as String? ?? '',
       filePath: '',
@@ -274,6 +286,9 @@ class DownloadService extends ChangeNotifier {
     Track track, {
     required String albumTitle,
     required int index,
+    String albumIntro = '',
+    String albumCategory = '',
+    int albumTotal = 0,
   }) async {
     final existing = taskFor(track.trackId);
     if (existing != null) {
@@ -316,6 +331,9 @@ class DownloadService extends ChangeNotifier {
       index: index,
       url: url,
       dir: dir,
+      albumIntro: albumIntro,
+      albumCategory: albumCategory,
+      albumTotal: albumTotal,
     );
     _tasks.insert(0, task);
     await _save();
@@ -331,6 +349,9 @@ class DownloadService extends ChangeNotifier {
     required int index,
     required String url,
     required Directory dir,
+    String albumIntro = '',
+    String albumCategory = '',
+    int albumTotal = 0,
   }) {
     final albumName = albumTitle.isNotEmpty
         ? albumTitle
@@ -361,6 +382,9 @@ class DownloadService extends ChangeNotifier {
       cover: track.cover,
       duration: track.duration,
       index: index,
+      intro: albumIntro,
+      categoryName: albumCategory,
+      albumTotal: albumTotal,
       trackJson: jsonEncode(track.toJson()),
       fileName: fileName,
       filePath: '${dir.path}/$fileName',
@@ -373,6 +397,9 @@ class DownloadService extends ChangeNotifier {
     List<Track> tracks, {
     required String albumTitle,
     required int Function(Track) indexOf,
+    String albumIntro = '',
+    String albumCategory = '',
+    int albumTotal = 0,
   }) async {
     var ok = 0;
     String? firstError;
@@ -382,6 +409,9 @@ class DownloadService extends ChangeNotifier {
         t,
         albumTitle: albumTitle,
         index: indexOf(t),
+        albumIntro: albumIntro,
+        albumCategory: albumCategory,
+        albumTotal: albumTotal,
       );
       if (err == null) {
         ok++;
@@ -560,7 +590,10 @@ class DownloadService extends ChangeNotifier {
   @visibleForTesting
   Future<void> applyTagsForTest(DownloadTask task) => _tagCompletedFile(task);
 
-  /// 下载完成后把标签写进文件本体：标题/专辑/主播/集序号/封面。
+  /// 下载完成后把标签写进文件本体：标题/专辑/主播/序号（带总集数）/封面，
+  /// 以及简介（COMM）、分类（TCON）、发布日期（TDRC）、时长（TLEN）和
+  /// TXXX 自定义项（声音/专辑 ID、播放量、来源、付费标记）——字段拿不到
+  /// 的不写，不编造。
   ///
   /// - **仅 iOS 平台执行**（平台门控）：Android/桌面/Web 等平台的下载
   ///   保持原始文件不写本体标签，tagged 记 false。
@@ -587,6 +620,8 @@ class DownloadService extends ChangeNotifier {
           coverMime = fetched.$2;
         }
       }
+      final track = task.toTrack();
+      final durationSec = task.duration > 0 ? task.duration : track.duration;
       final ok = await AudioTagWriter.writeToFile(
         File(task.filePath),
         AudioTagData(
@@ -594,8 +629,20 @@ class DownloadService extends ChangeNotifier {
           album: task.albumTitle.isNotEmpty ? task.albumTitle : task.nickname,
           artist: task.nickname,
           trackNumber: task.index,
+          totalTracks: task.albumTotal,
           coverBytes: coverBytes,
           coverMime: coverMime,
+          description: task.intro,
+          genre: task.categoryName,
+          releaseDate: _releaseDateOf(track.createdAt),
+          durationMs: durationSec > 0 ? durationSec * 1000 : 0,
+          custom: [
+            ('trackId', '${task.trackId}'),
+            ('albumId', '${task.albumId}'),
+            if (track.playtimes > 0) ('playtimes', '${track.playtimes}'),
+            ('source', 'ximalaya'),
+            if (track.isPaid) ('isPaid', 'true'),
+          ],
         ),
       );
       task.tagged = ok;
@@ -628,6 +675,18 @@ class DownloadService extends ChangeNotifier {
     } catch (_) {
       return null;
     }
+  }
+
+  /// Track 发布时间（接口 createdAt）→ TDRC 的 yyyy-MM-dd。
+  /// createdAt 为毫秒级时间戳（个别来源可能是秒级，做一次量级归一）；
+  /// 无效值返回空串（不写 TDRC）。
+  static String _releaseDateOf(int createdAt) {
+    if (createdAt <= 0) return '';
+    final ms = createdAt < 100000000000 ? createdAt * 1000 : createdAt;
+    final d = DateTime.fromMillisecondsSinceEpoch(ms);
+    final m = d.month.toString().padLeft(2, '0');
+    final day = d.day.toString().padLeft(2, '0');
+    return '${d.year}-$m-$day';
   }
 
   static String _mimeForCoverUrl(String url) {

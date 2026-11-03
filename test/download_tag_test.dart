@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -37,9 +38,31 @@ String decodeTextFrame(Uint8List payload) {
   for (var i = 1; i + 1 < payload.length; i += 2) {
     units.add(payload[i] | (payload[i + 1] << 8));
   }
-  var s = String.fromCharCodes(units);
-  if (s.startsWith('\uFEFF')) s = s.substring(1);
-  return s;
+  return stripBom(String.fromCharCodes(units));
+}
+
+String stripBom(String s) => s.startsWith('\uFEFF') ? s.substring(1) : s;
+
+/// 解析 COMM/TXXX 这类「多段 UTF-16 字符串」payload：跳过 [skip] 字节
+/// 前缀（COMM 为 编码+语言 共 4 字节，TXXX 为编码 1 字节）后，
+/// 按 0x0000 码元切分并去 BOM。COMM → ['', 正文]，TXXX → [键, 值]。
+List<String> decodeUtf16Parts(Uint8List payload, {required int skip}) {
+  final units = <int>[];
+  for (var i = skip; i + 1 < payload.length; i += 2) {
+    units.add(payload[i] | (payload[i + 1] << 8));
+  }
+  final parts = <String>[];
+  var cur = <int>[];
+  for (final u in units) {
+    if (u == 0) {
+      parts.add(stripBom(String.fromCharCodes(cur)));
+      cur = [];
+    } else {
+      cur.add(u);
+    }
+  }
+  if (cur.isNotEmpty) parts.add(stripBom(String.fromCharCodes(cur)));
+  return parts;
 }
 
 void main() {
@@ -83,6 +106,47 @@ void main() {
       expect(frames.containsKey('TRCK'), isFalse);
       expect(frames.containsKey('APIC'), isFalse);
       expect(frames.containsKey('TALB'), isFalse); // 空专辑名不写空帧
+    });
+
+    test('扩展帧往返：COMM/TCON/TDRC/TLEN/TRCK(序号/总集数)/TXXX', () {
+      final tag = AudioTagWriter.buildTag(
+        const AudioTagData(
+          title: '标题',
+          album: '专辑',
+          artist: '主播',
+          trackNumber: 3,
+          totalTracks: 12,
+          description: '这是一段专辑简介',
+          genre: '有声书',
+          releaseDate: '2023-11-14',
+          durationMs: 754000,
+          custom: [('trackId', '42'), ('source', 'ximalaya')],
+        ),
+      );
+      final frames = AudioTagWriter.parseFrames(tag);
+      expect(decodeTextFrame(frames['TRCK']!.single), '3/12');
+      expect(decodeTextFrame(frames['TCON']!.single), '有声书');
+      expect(decodeTextFrame(frames['TDRC']!.single), '2023-11-14');
+      expect(decodeTextFrame(frames['TLEN']!.single), '754000');
+      expect(decodeUtf16Parts(frames['COMM']!.single, skip: 4), [
+        '',
+        '这是一段专辑简介',
+      ]);
+      final txxx = frames['TXXX']!
+          .map((p) => decodeUtf16Parts(p, skip: 1))
+          .toList();
+      expect(txxx, contains(equals(['trackId', '42'])));
+      expect(txxx, contains(equals(['source', 'ximalaya'])));
+    });
+
+    test('可选字段全空时不写任何扩展帧', () {
+      final tag = AudioTagWriter.buildTag(
+        const AudioTagData(title: 't', album: 'a', artist: 'b'),
+      );
+      final frames = AudioTagWriter.parseFrames(tag);
+      for (final id in ['COMM', 'TCON', 'TDRC', 'TLEN', 'TXXX']) {
+        expect(frames.containsKey(id), isFalse, reason: id);
+      }
     });
 
     test('supportsTagging 仅 mp3', () {
@@ -166,6 +230,10 @@ void main() {
       String fileName,
       String path, {
       String cover = '',
+      String intro = '',
+      String categoryName = '',
+      int albumTotal = 0,
+      String trackJson = '',
     }) {
       return DownloadTask(
         trackId: 5,
@@ -176,6 +244,10 @@ void main() {
         cover: cover,
         duration: 60,
         index: 2,
+        intro: intro,
+        categoryName: categoryName,
+        albumTotal: albumTotal,
+        trackJson: trackJson,
         fileName: fileName,
         filePath: path,
         fileSize: 0,
@@ -274,6 +346,90 @@ void main() {
         svc.settings,
       );
       expect(fresh.isIOS(), Platform.isIOS);
+    });
+
+    test('全量元信息写入：COMM/TCON/TDRC/TLEN/TRCK(序号/总)/TXXX', () async {
+      final path = '${dir.path}/full.mp3';
+      await File(path).writeAsBytes(fakeAudio());
+      const createdMs = 1700000000000;
+      final track = Track(
+        trackId: 5,
+        albumId: 9,
+        title: '标题乙',
+        nickname: '主播丙',
+        duration: 60,
+        playtimes: 12345,
+        createdAt: createdMs,
+        isPaid: true,
+      );
+      final task = completedTask(
+        'full.mp3',
+        path,
+        intro: '简介文字',
+        categoryName: '有声书',
+        albumTotal: 24,
+        trackJson: jsonEncode(track.toJson()),
+      );
+      await svc.applyTagsForTest(task);
+      expect(task.tagged, isTrue);
+      final frames = AudioTagWriter.parseFrames(await File(path).readAsBytes());
+      expect(decodeTextFrame(frames['TRCK']!.single), '2/24');
+      expect(decodeTextFrame(frames['TCON']!.single), '有声书');
+      expect(decodeTextFrame(frames['TLEN']!.single), '60000');
+      final d = DateTime.fromMillisecondsSinceEpoch(createdMs);
+      final expectedDate =
+          '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+      expect(decodeTextFrame(frames['TDRC']!.single), expectedDate);
+      expect(decodeUtf16Parts(frames['COMM']!.single, skip: 4).last, '简介文字');
+      final txxx = frames['TXXX']!
+          .map((p) => decodeUtf16Parts(p, skip: 1))
+          .toList();
+      expect(txxx, contains(equals(['trackId', '5'])));
+      expect(txxx, contains(equals(['albumId', '9'])));
+      expect(txxx, contains(equals(['playtimes', '12345'])));
+      expect(txxx, contains(equals(['source', 'ximalaya'])));
+      expect(txxx, contains(equals(['isPaid', 'true'])));
+    });
+
+    test('拿不到的字段不写：无简介/分类/日期/播放量时相应帧缺省', () async {
+      final path = '${dir.path}/bare.mp3';
+      await File(path).writeAsBytes(fakeAudio());
+      // completedTask 默认无 intro/category，trackJson 为空（发布日期/
+      // 播放量/付费标记都拿不到）
+      final task = completedTask('bare.mp3', path);
+      await svc.applyTagsForTest(task);
+      expect(task.tagged, isTrue);
+      final frames = AudioTagWriter.parseFrames(await File(path).readAsBytes());
+      expect(frames.containsKey('COMM'), isFalse);
+      expect(frames.containsKey('TCON'), isFalse);
+      expect(frames.containsKey('TDRC'), isFalse);
+      expect(decodeTextFrame(frames['TRCK']!.single), '2'); // 无总集数
+      final txxxKeys = frames['TXXX']!
+          .map((p) => decodeUtf16Parts(p, skip: 1).first)
+          .toSet();
+      expect(txxxKeys, {'trackId', 'albumId', 'source'});
+    });
+
+    test('任务新字段（intro/categoryName/albumTotal）JSON 往返与旧数据缺省', () {
+      final task = completedTask(
+        'a.mp3',
+        '/x/a.mp3',
+        intro: '简介',
+        categoryName: '分类',
+        albumTotal: 24,
+      );
+      final restored = DownloadTask.fromJson(task.toJson());
+      expect(restored.intro, '简介');
+      expect(restored.categoryName, '分类');
+      expect(restored.albumTotal, 24);
+      final legacy = task.toJson()
+        ..remove('intro')
+        ..remove('categoryName')
+        ..remove('albumTotal');
+      final fromLegacy = DownloadTask.fromJson(legacy);
+      expect(fromLegacy.intro, '');
+      expect(fromLegacy.categoryName, '');
+      expect(fromLegacy.albumTotal, 0);
     });
 
     test('tagged 标记随任务 JSON 往返持久化', () {

@@ -13,6 +13,12 @@ class TrackDownloadButton extends StatelessWidget {
   final String albumTitle;
   final int index;
 
+  /// 专辑简介/分类/总集数（写标签用，有则带入任务记录；播放页等无此
+  /// 上下文处留空即可）
+  final String albumIntro;
+  final String albumCategory;
+  final int albumTotal;
+
   /// 紧凑模式（AppBar 等窄位置）：已完成只显示对勾图标，不带文字
   final bool compact;
 
@@ -21,6 +27,9 @@ class TrackDownloadButton extends StatelessWidget {
     required this.track,
     required this.albumTitle,
     required this.index,
+    this.albumIntro = '',
+    this.albumCategory = '',
+    this.albumTotal = 0,
     this.compact = false,
   });
 
@@ -105,6 +114,9 @@ class TrackDownloadButton extends StatelessWidget {
           track,
           albumTitle: albumTitle,
           index: index,
+          albumIntro: albumIntro,
+          albumCategory: albumCategory,
+          albumTotal: albumTotal,
         );
         if (err != null && context.mounted) {
           ScaffoldMessenger.of(
