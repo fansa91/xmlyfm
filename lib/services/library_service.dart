@@ -72,17 +72,55 @@ class HistoryEntry {
       );
 }
 
-/// 本地收藏 + 播放历史（SharedPreferences JSON 存储，无云端同步）。
+/// 一条续播进度（每条声音最近一次的播放位置）
+class ProgressEntry {
+  final int trackId;
+  final int positionSec;
+  final int durationSec; // 0 表示未知
+  final int updatedAt; // ms epoch
+
+  const ProgressEntry({
+    required this.trackId,
+    required this.positionSec,
+    required this.durationSec,
+    required this.updatedAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'trackId': trackId,
+        'positionSec': positionSec,
+        'durationSec': durationSec,
+        'updatedAt': updatedAt,
+      };
+
+  factory ProgressEntry.fromJson(Map<String, dynamic> json) => ProgressEntry(
+        trackId: json['trackId'] as int? ?? 0,
+        positionSec: json['positionSec'] as int? ?? 0,
+        durationSec: json['durationSec'] as int? ?? 0,
+        updatedAt: json['updatedAt'] as int? ?? 0,
+      );
+}
+
+/// 本地收藏（专辑 + 声音）+ 播放历史 + 续播进度
+/// （SharedPreferences JSON 存储，无云端同步）。
 class LibraryService extends ChangeNotifier {
   static const _keyFavorites = 'fav_albums';
+  static const _keyFavTracks = 'fav_tracks';
   static const _keyHistory = 'play_history';
+  static const _keyProgress = 'play_progress';
   static const _maxHistory = 100;
+  static const _maxProgress = 200;
 
   late SharedPreferences _prefs;
   List<FavoriteAlbum> _favorites = [];
+  List<Track> _favoriteTracks = [];
   List<HistoryEntry> _history = [];
 
+  /// 续播进度表（最近更新在前，超出上限淘汰尾部最旧的）
+  List<ProgressEntry> _progress = [];
+
   List<FavoriteAlbum> get favorites => List.unmodifiable(_favorites);
+  List<Track> get favoriteTracks => List.unmodifiable(_favoriteTracks);
   List<HistoryEntry> get history => List.unmodifiable(_history);
 
   Future<void> init() async {
@@ -91,9 +129,17 @@ class LibraryService extends ChangeNotifier {
         .map(FavoriteAlbum.fromJson)
         .where((a) => a.albumId > 0)
         .toList();
+    _favoriteTracks = _decodeList(_prefs.getString(_keyFavTracks))
+        .map(Track.fromJson)
+        .where((t) => t.trackId > 0)
+        .toList();
     _history = _decodeList(_prefs.getString(_keyHistory))
         .map(HistoryEntry.fromJson)
         .where((h) => h.track.trackId > 0)
+        .toList();
+    _progress = _decodeList(_prefs.getString(_keyProgress))
+        .map(ProgressEntry.fromJson)
+        .where((e) => e.trackId > 0 && e.positionSec > 0)
         .toList();
   }
 
@@ -146,5 +192,70 @@ class LibraryService extends ChangeNotifier {
     _history = [];
     await _prefs.remove(_keyHistory);
     notifyListeners();
+  }
+
+  // ---------- 收藏声音 ----------
+
+  bool isFavoriteTrack(int trackId) =>
+      _favoriteTracks.any((t) => t.trackId == trackId);
+
+  Future<void> toggleFavoriteTrack(Track track) async {
+    if (isFavoriteTrack(track.trackId)) {
+      _favoriteTracks =
+          _favoriteTracks.where((t) => t.trackId != track.trackId).toList();
+    } else {
+      _favoriteTracks = [track, ..._favoriteTracks];
+    }
+    await _prefs.setString(_keyFavTracks,
+        jsonEncode(_favoriteTracks.map((e) => e.toJson()).toList()));
+    notifyListeners();
+  }
+
+  // ---------- 续播进度 ----------
+
+  /// 某条声音上次保存的续播位置；没有记录或已播完返回 null。
+  Duration? savedPosition(int trackId) {
+    for (final e in _progress) {
+      if (e.trackId == trackId) {
+        return e.positionSec > 0 ? Duration(seconds: e.positionSec) : null;
+      }
+    }
+    return null;
+  }
+
+  /// 保存续播位置。position <= 0 或已到结尾（距总时长不足 5 秒）视为
+  /// 无需续播，改为清除记录。不 notifyListeners：进度不在任何界面展示，
+  /// 高频落盘时避免无谓重建。
+  Future<void> saveProgress(int trackId, Duration position,
+      {Duration? total}) async {
+    final posSec = position.inSeconds;
+    final totalSec = total?.inSeconds ?? 0;
+    final finished = totalSec > 0 && posSec >= totalSec - 5;
+    if (posSec <= 0 || finished) {
+      await clearProgress(trackId);
+      return;
+    }
+    final entry = ProgressEntry(
+      trackId: trackId,
+      positionSec: posSec,
+      durationSec: totalSec,
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+    );
+    _progress = [
+      entry,
+      ..._progress.where((e) => e.trackId != trackId),
+    ];
+    if (_progress.length > _maxProgress) {
+      _progress = _progress.sublist(0, _maxProgress);
+    }
+    await _prefs.setString(_keyProgress,
+        jsonEncode(_progress.map((e) => e.toJson()).toList()));
+  }
+
+  Future<void> clearProgress(int trackId) async {
+    if (!_progress.any((e) => e.trackId == trackId)) return;
+    _progress = _progress.where((e) => e.trackId != trackId).toList();
+    await _prefs.setString(_keyProgress,
+        jsonEncode(_progress.map((e) => e.toJson()).toList()));
   }
 }

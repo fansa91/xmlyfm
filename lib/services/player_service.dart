@@ -52,6 +52,10 @@ class PlayerService extends ChangeNotifier {
   final Map<String, PlayResult> _resolved = {};
   bool _busy = false;
 
+  /// 续播进度节流落盘：播放中每 5 秒最多存一次
+  DateTime _lastProgressSave = DateTime.fromMillisecondsSinceEpoch(0);
+  static const _progressSaveInterval = Duration(seconds: 5);
+
   Timer? _sleepTimer;
   DateTime? _sleepAt;
 
@@ -61,6 +65,8 @@ class PlayerService extends ChangeNotifier {
   PlayerService(this.resolver, this.settings, this.library) {
     _player.onPlayerStateChanged.listen((state) {
       _playing = state == PlayerState.playing;
+      // 暂停时立即落盘续播进度（播完走 onPlayerComplete 清除，不在这里存）
+      if (state == PlayerState.paused) _saveProgressNow();
       notifyListeners();
     });
     _player.onPlayerComplete.listen((_) => _onCompleted());
@@ -79,6 +85,16 @@ class PlayerService extends ChangeNotifier {
           pos.inSeconds >= r.sampleDuration) {
         sampleEnded = true;
         _player.pause();
+      }
+      // 续播进度节流落盘
+      final t = current;
+      if (_playing && t != null && pos.inSeconds > 0) {
+        final now = DateTime.now();
+        if (now.difference(_lastProgressSave) >= _progressSaveInterval) {
+          _lastProgressSave = now;
+          unawaited(
+              library.saveProgress(t.trackId, pos, total: _duration));
+        }
       }
       notifyListeners();
     });
@@ -142,6 +158,7 @@ class PlayerService extends ChangeNotifier {
   }
 
   void clearQueue() {
+    _saveProgressNow();
     queue = [];
     index = -1;
     currentResult = null;
@@ -149,10 +166,21 @@ class PlayerService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 立即把当前曲目的播放位置落盘（暂停/切歌/退出时调用）。
+  void _saveProgressNow() {
+    final t = current;
+    if (t == null || _position.inSeconds <= 0) return;
+    _lastProgressSave = DateTime.now();
+    unawaited(library.saveProgress(t.trackId, _position, total: _duration));
+  }
+
   // ---------- 播放实现 ----------
 
   Future<void> _playAt(int i) async {
     if (queue.isEmpty || _busy) return;
+    // 切歌前先把上一首的进度立即落盘
+    final prevTrackId = current?.trackId;
+    _saveProgressNow();
     _busy = true;
     errorMessage = null;
     sampleEnded = false;
@@ -167,6 +195,11 @@ class PlayerService extends ChangeNotifier {
           continue;
         }
         index = n;
+        if (track.trackId != prevTrackId) {
+          // 换了曲目：清掉上一首的时长/位置，避免界面与续播钳制用到旧值
+          _duration = null;
+          _position = Duration.zero;
+        }
         notifyListeners();
 
         PlayResult result;
@@ -194,6 +227,20 @@ class PlayerService extends ChangeNotifier {
         try {
           await _player.setPlaybackRate(_speed);
           await _player.play(UrlSource(result.url!));
+          // 续播：跳回上次保存的位置（开头 5 秒内、贴近结尾、试听已达
+          // 上限时不跳，避免刚播完的又被拉回去）
+          final saved = library.savedPosition(track.trackId);
+          if (saved != null && saved.inSeconds > 5) {
+            final beyondSample = result.isSample &&
+                result.sampleDuration > 0 &&
+                saved.inSeconds >= result.sampleDuration;
+            final nearEnd =
+                track.duration > 0 && saved.inSeconds >= track.duration - 10;
+            if (!beyondSample && !nearEnd) {
+              await _player.seek(saved);
+              _position = saved;
+            }
+          }
           errorMessage = null;
           notifyListeners();
           library.addHistory(track);
@@ -247,6 +294,9 @@ class PlayerService extends ChangeNotifier {
   }
 
   Future<void> _onCompleted() async {
+    // 播完清除该集的续播进度，下次从头播
+    final done = current;
+    if (done != null) unawaited(library.clearProgress(done.trackId));
     if (mode == PlayMode.single && current != null) {
       await _player.seek(Duration.zero);
       await _player.resume();
@@ -364,6 +414,7 @@ class PlayerService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _saveProgressNow();
     _sleepTimer?.cancel();
     _player.dispose();
     super.dispose();

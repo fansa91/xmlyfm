@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 明文 HTTP 只放行喜马拉雅相关域名：搜索 hub 接口、音频 CDN、封面图
+     都可能走 http；其余域名维持 Android 9+ 默认的禁止明文策略。 -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">ximalaya.com</domain>
+        <domain includeSubdomains="true">xmcdn.com</domain>
+    </domain-config>
+</network-security-config>

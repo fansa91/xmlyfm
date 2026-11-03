@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../core/utils.dart';
 import '../models/models.dart';
+import '../services/library_service.dart';
 import '../services/player_service.dart';
 import '../widgets/cover_image.dart';
 
@@ -14,6 +15,7 @@ class PlayerScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final player = context.watch<PlayerService>();
+    final library = context.watch<LibraryService>();
     final theme = Theme.of(context);
     final track = player.current;
 
@@ -21,6 +23,19 @@ class PlayerScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('正在播放'),
         actions: [
+          if (track != null)
+            IconButton(
+              icon: Icon(
+                library.isFavoriteTrack(track.trackId)
+                    ? Icons.favorite
+                    : Icons.favorite_border,
+                color: library.isFavoriteTrack(track.trackId)
+                    ? theme.colorScheme.primary
+                    : null,
+              ),
+              tooltip: '收藏声音',
+              onPressed: () => library.toggleFavoriteTrack(track),
+            ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.timer_outlined),
             tooltip: '定时关闭',

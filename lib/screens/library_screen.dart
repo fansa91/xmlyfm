@@ -8,7 +8,7 @@ import '../services/player_service.dart';
 import '../widgets/cover_image.dart';
 import 'album_screen.dart';
 
-/// 我的：收藏专辑 + 播放历史（本地存储，shared_preferences）。
+/// 我的：收藏专辑 + 收藏声音 + 播放历史（本地存储，shared_preferences）。
 class LibraryScreen extends StatelessWidget {
   const LibraryScreen({super.key});
 
@@ -62,6 +62,28 @@ class LibraryScreen extends StatelessWidget {
                   MaterialPageRoute(
                       builder: (_) => AlbumScreen(albumId: fav.albumId)),
                 ),
+              ),
+          const Divider(height: 24),
+          _sectionTitle(context, '收藏的声音'),
+          if (library.favoriteTracks.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Text('还没有收藏的声音，在播放页点爱心即可收藏'),
+            )
+          else
+            for (final t in library.favoriteTracks)
+              ListTile(
+                leading: CoverImage(url: t.cover, size: 48, radius: 8),
+                title: Text(t.title,
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                subtitle: Text(t.nickname,
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                trailing: IconButton(
+                  icon: const Icon(Icons.favorite),
+                  color: Theme.of(context).colorScheme.primary,
+                  onPressed: () => library.toggleFavoriteTrack(t),
+                ),
+                onTap: () => context.read<PlayerService>().playTrack(t),
               ),
           const Divider(height: 24),
           Row(
