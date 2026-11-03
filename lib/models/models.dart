@@ -36,6 +36,21 @@ class HomeTab {
     );
   }
 
+  /// 首页金刚区数据：只取分类页签（template_category，有落地页可跳），
+  /// 排除推荐本身与 H5/同城/会员等无落地页的类型；同一 categoryId
+  /// 去重、保序，最多 [limit] 个（余下从「更多」进分类页）。
+  static List<HomeTab> gridCategories(List<HomeTab> tabs, {int limit = 7}) {
+    final seen = <int>{};
+    final result = <HomeTab>[];
+    for (final t in tabs) {
+      if (result.length >= limit) break;
+      final cid = t.categoryId;
+      if (t.itemType != 'template_category' || cid == null) continue;
+      if (seen.add(cid)) result.add(t);
+    }
+    return result;
+  }
+
   /// 解析 customCategories 响应：categoryList[].itemList[]
   static List<HomeTab> parseHomeTabs(Map<String, dynamic> json) {
     final tabs = <HomeTab>[];
@@ -350,6 +365,20 @@ class RankAggregate {
       }
     }
     return tabs;
+  }
+
+  /// 全站榜单页签：目录里 categoryId=0 的全站组（热播/畅销/新品/口碑/
+  /// 影视原著/国学）+ 实力主播榜，首页「排行榜 · 更多」的全站榜单页用，
+  /// 与分类榜共用同一套页签/明细数据链。
+  static List<CategoryRankTab> tabsForSite(List<RankAggregate> catalog) =>
+      tabsForCategory(catalog, 0);
+
+  /// 全站热播榜页签（首页排行榜卡预览取数用），目录里没有则为 null。
+  static CategoryRankTab? siteHotTab(List<RankAggregate> catalog) {
+    for (final tab in tabsForSite(catalog)) {
+      if (!tab.isAnchor && tab.name.contains('热播')) return tab;
+    }
+    return null;
   }
 }
 
