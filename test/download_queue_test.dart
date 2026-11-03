@@ -12,12 +12,20 @@ import 'package:xmlyfm/services/settings_service.dart';
 import 'package:xmlyfm/services/ximalaya_service.dart';
 
 /// 假解析器：每条声音给一个假 CDN 地址（.m4a 后缀，免写标签干扰队列用例）。
+/// 下载服务走的是 resolveForDownload，两个入口都覆盖，避免落到真实
+/// baseInfo 网络请求。
 class FakeResolver extends PlayResolver {
   FakeResolver() : super(XimalayaService());
 
   @override
   Future<PlayResult> resolve(Track track, {required int quality}) async =>
       PlayResult(url: 'https://cdn.test/${track.trackId}.m4a');
+
+  @override
+  Future<PlayResult> resolveForDownload(
+    Track track, {
+    required int quality,
+  }) async => PlayResult(url: 'https://cdn.test/${track.trackId}.m4a');
 }
 
 /// 可控门的假网络层：请求进来先登记并挂起，测试用 [release] 放行；
@@ -60,12 +68,14 @@ class FakeAdapter implements HttpClientAdapter {
       });
       await gate.future;
     }
-    final bytes = empty.contains(url)
-        ? <int>[]
-        : 'audio-$url'.codeUnits;
-    return ResponseBody.fromBytes(bytes, 200, headers: {
-      Headers.contentLengthHeader: ['${bytes.length}'],
-    });
+    final bytes = empty.contains(url) ? <int>[] : 'audio-$url'.codeUnits;
+    return ResponseBody.fromBytes(
+      bytes,
+      200,
+      headers: {
+        Headers.contentLengthHeader: ['${bytes.length}'],
+      },
+    );
   }
 
   void release(String url) {
@@ -113,7 +123,11 @@ void main() {
     });
 
     Future<void> enqueue(int id) async {
-      final err = await svc.enqueueTrack(trackOf(id), albumTitle: 'A', index: id);
+      final err = await svc.enqueueTrack(
+        trackOf(id),
+        albumTitle: 'A',
+        index: id,
+      );
       expect(err, isNull);
     }
 

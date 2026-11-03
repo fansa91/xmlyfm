@@ -378,10 +378,11 @@ class DownloadService extends ChangeNotifier {
     final dir = _dir;
     if (dir == null) return '下载目录未就绪';
 
-    // 先解析：试听/无地址直接拒绝，不建任务
+    // 先解析（下载专用解析：优先 mp3 直链，保证下回来能写 ID3 标签）：
+    // 试听/无地址直接拒绝，不建任务
     final String url;
     try {
-      final result = await resolver.resolve(
+      final result = await resolver.resolveForDownload(
         track,
         quality: settings.defaultQuality,
       );
@@ -459,6 +460,37 @@ class DownloadService extends ChangeNotifier {
       filePath: p.join(dir.path, fileName),
       createdAt: DateTime.now().millisecondsSinceEpoch,
     );
+  }
+
+  /// 开跑前按最终 URL 的真实扩展名校正任务文件名：入队解析与开跑
+  /// 重解析可能给出不同格式的地址，而扩展名决定写标签分流
+  /// （只有 .mp3 写 ID3）。扩展名变化时换名落盘；旧路径上未完成
+  /// 任务只会留半截文件，一并清掉免成孤儿。
+  Future<void> _alignFileExtension(DownloadTask task, String url) async {
+    final ext = DownloadFileNameFormatter.extensionForUrl(url);
+    if (p.extension(task.fileName).toLowerCase() == ext) return;
+    final oldPath = task.filePath;
+    final dirPath = p.dirname(oldPath);
+    final taken = _tasks
+        .where((t) => t.trackId != task.trackId)
+        .map((t) => t.fileName)
+        .toSet();
+    task.fileName = DownloadFileNameFormatter.uniqueName(
+      p.basenameWithoutExtension(task.fileName),
+      ext,
+      (candidate) =>
+          taken.contains(candidate) ||
+          File(p.join(dirPath, candidate)).existsSync(),
+    );
+    task.filePath = p.join(dirPath, task.fileName);
+    if (oldPath != task.filePath) {
+      final old = File(oldPath);
+      if (await old.exists()) {
+        try {
+          await old.delete();
+        } catch (_) {}
+      }
+    }
   }
 
   /// 批量入队。返回 (成功入队数, 第一条失败原因或 null)。
@@ -584,11 +616,12 @@ class DownloadService extends ChangeNotifier {
     task.errorMessage = null;
     notifyListeners();
 
-    final file = File(task.filePath);
+    var file = File(task.filePath);
     try {
-      // 每次开跑都重新解析地址（直链可能过期）；试听会在这里再次被拦
+      // 每次开跑都重新解析地址（直链可能过期；下载专用解析优先 mp3）；
+      // 试听会在这里再次被拦
       final track = task.toTrack();
-      final result = await resolver.resolve(
+      final result = await resolver.resolveForDownload(
         track,
         quality: settings.defaultQuality,
       );
@@ -599,6 +632,10 @@ class DownloadService extends ChangeNotifier {
       if (url == null || url.isEmpty) {
         throw XmException(result.notice ?? '无法获取下载地址');
       }
+      // 以最终 URL 的真实扩展名校正文件名：入队时与开跑时解析出的
+      // 格式可能不同，而扩展名决定写标签分流，只认 URL 后缀不信字段名
+      await _alignFileExtension(task, url);
+      file = File(task.filePath);
 
       var lastPercent = -1;
       await _dio.download(
