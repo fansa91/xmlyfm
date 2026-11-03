@@ -249,6 +249,257 @@ class MetaAlbumsPage {
   }
 }
 
+/// 聚合榜目录里的一条分类映射（aggregateRankList 的 rankGroups 一项，
+/// 文档 §2.9）：某个聚合榜在某个分类下的明细 id。
+/// 专辑榜按内容分类 categoryId 索引；主播榜的 categoryId 是主播分组 id。
+class RankGroupRef {
+  final int categoryId;
+  final String contentType; // album / anchor
+  final String displayName;
+  final int rankingListId;
+
+  const RankGroupRef({
+    required this.categoryId,
+    required this.contentType,
+    required this.displayName,
+    required this.rankingListId,
+  });
+
+  factory RankGroupRef.fromJson(Map<String, dynamic> json) {
+    return RankGroupRef(
+      categoryId: intOf(json['categoryId']),
+      contentType: strOf(json['contentType']),
+      displayName: strOf(json['displayName']),
+      rankingListId: intOf(json['rankingListId']),
+    );
+  }
+}
+
+/// 一个聚合榜（aggregateRankList/v2/AggregateRankListTabs 的一项）：
+/// 热播榜/畅销榜/新品榜/口碑榜/影视原著/国学榜（专辑榜）与
+/// 实力主播（anchorOrNot=true，主播榜）。
+class RankAggregate {
+  final String name;
+  final int clusterType;
+  final bool anchorOrNot;
+  final List<RankGroupRef> groups;
+
+  const RankAggregate({
+    required this.name,
+    required this.clusterType,
+    required this.anchorOrNot,
+    required this.groups,
+  });
+
+  factory RankAggregate.fromJson(Map<String, dynamic> json) {
+    final config = _mapOf(json['aggregateListConfig']);
+    return RankAggregate(
+      name: strOf(config['aggregateName']),
+      clusterType: intOf(config['clusterType']),
+      anchorOrNot: boolOf(config['anchorOrNot']),
+      groups: _listOf(json['rankGroups'])
+          .map((e) => RankGroupRef.fromJson(_mapOf(e)))
+          .where((g) => g.rankingListId > 0)
+          .toList(),
+    );
+  }
+
+  /// 解析整个目录响应：data.aggregateRankList[]
+  static List<RankAggregate> parseCatalog(Map<String, dynamic> json) {
+    return _listOf(_mapOf(json['data'])['aggregateRankList'])
+        .map((e) => RankAggregate.fromJson(_mapOf(e)))
+        .where((a) => a.name.isNotEmpty && a.groups.isNotEmpty)
+        .toList();
+  }
+
+  /// 该分类在此榜下的明细映射（专辑榜按 categoryId 查；主播榜返回 null，
+  /// 主播分组不按内容分类索引，走 [CategoryRankTab] 的 anchorGroups）。
+  RankGroupRef? groupForCategory(int categoryId) {
+    if (anchorOrNot) return null;
+    for (final g in groups) {
+      if (g.categoryId == categoryId) return g;
+    }
+    return null;
+  }
+
+  /// 按分类过滤出可展示的榜单页签：专辑榜该分类有明细才入选；
+  /// 主播榜（若目录里有）恒入选，带上全部主播分组。
+  static List<CategoryRankTab> tabsForCategory(
+    List<RankAggregate> catalog,
+    int categoryId,
+  ) {
+    final tabs = <CategoryRankTab>[];
+    for (final agg in catalog) {
+      if (agg.anchorOrNot) {
+        tabs.add(CategoryRankTab(
+          name: agg.name,
+          clusterType: agg.clusterType,
+          isAnchor: true,
+          anchorGroups: agg.groups,
+        ));
+      } else {
+        final group = agg.groupForCategory(categoryId);
+        if (group != null) {
+          tabs.add(CategoryRankTab(
+            name: agg.name,
+            clusterType: agg.clusterType,
+            isAnchor: false,
+            rankingListId: group.rankingListId,
+          ));
+        }
+      }
+    }
+    return tabs;
+  }
+}
+
+/// 分类页排行榜的一个页签：专辑榜带该分类的 rankingListId；
+/// 主播榜带全部分组（组内再按 rankingListId 拉明细）。
+class CategoryRankTab {
+  final String name;
+  final int clusterType;
+  final bool isAnchor;
+  final int rankingListId;
+  final List<RankGroupRef> anchorGroups;
+
+  const CategoryRankTab({
+    required this.name,
+    required this.clusterType,
+    required this.isAnchor,
+    this.rankingListId = 0,
+    this.anchorGroups = const [],
+  });
+}
+
+/// 榜单里的一张专辑（concreteRankList 的 list 一项，字段与专辑卡通用，
+/// 多带播放量/集数/付费标记）
+class RankAlbum {
+  final int albumId;
+  final String title;
+  final String cover;
+  final String nickname;
+  final int playsCounts;
+  final int tracks;
+  final bool isPaid;
+
+  const RankAlbum({
+    required this.albumId,
+    required this.title,
+    required this.cover,
+    required this.nickname,
+    required this.playsCounts,
+    required this.tracks,
+    required this.isPaid,
+  });
+
+  factory RankAlbum.fromJson(Map<String, dynamic> json) {
+    var albumId = intOf(json['albumId']);
+    if (albumId == 0) albumId = intOf(json['id']);
+    var cover = strOf(json['coverLarge']);
+    if (cover.isEmpty) cover = strOf(json['coverMiddle']);
+    if (cover.isEmpty) cover = strOf(json['coverPath']);
+    return RankAlbum(
+      albumId: albumId,
+      title: strOf(json['title']),
+      cover: cover,
+      nickname: strOf(json['nickname']),
+      playsCounts: intOf(json['playsCounts']),
+      tracks: intOf(json['tracks']),
+      isPaid: boolOf(json['isPaid']),
+    );
+  }
+}
+
+/// 专辑榜明细一页（aggregateRankList/concreteRankList）：翻页参数 pageId。
+class RankAlbumsPage {
+  final List<RankAlbum> albums;
+  final int pageId;
+  final int maxPageId;
+
+  const RankAlbumsPage({
+    required this.albums,
+    required this.pageId,
+    required this.maxPageId,
+  });
+
+  bool get hasMore => pageId < maxPageId;
+
+  factory RankAlbumsPage.fromJson(
+    Map<String, dynamic> json, {
+    required int pageId,
+  }) {
+    final albums = _listOf(json['list'])
+        .map((e) => RankAlbum.fromJson(_mapOf(e)))
+        .where((a) => a.albumId > 0 && a.title.isNotEmpty)
+        .toList();
+    return RankAlbumsPage(
+      albums: albums,
+      pageId: pageId,
+      maxPageId: intOf(json['maxPageId']),
+    );
+  }
+}
+
+/// 实力主播榜里的一个主播（anchorRankList 的 list 一项）
+class RankAnchor {
+  final int uid;
+  final String nickname;
+  final String avatar;
+  final String describe;
+  final int followersCounts;
+  final int tracksCounts;
+
+  const RankAnchor({
+    required this.uid,
+    required this.nickname,
+    required this.avatar,
+    required this.describe,
+    required this.followersCounts,
+    required this.tracksCounts,
+  });
+
+  factory RankAnchor.fromJson(Map<String, dynamic> json) {
+    return RankAnchor(
+      uid: intOf(json['uid']),
+      nickname: strOf(json['nickname']),
+      avatar: strOf(json['logoPic']),
+      describe: strOf(json['personDescribe']),
+      followersCounts: intOf(json['followersCounts']),
+      tracksCounts: intOf(json['tracksCounts']),
+    );
+  }
+}
+
+/// 主播榜明细一页（aggregateRankList/anchorRankList）：翻页参数 pageId。
+class RankAnchorsPage {
+  final List<RankAnchor> anchors;
+  final int pageId;
+  final int maxPageId;
+
+  const RankAnchorsPage({
+    required this.anchors,
+    required this.pageId,
+    required this.maxPageId,
+  });
+
+  bool get hasMore => pageId < maxPageId;
+
+  factory RankAnchorsPage.fromJson(
+    Map<String, dynamic> json, {
+    required int pageId,
+  }) {
+    final anchors = _listOf(json['list'])
+        .map((e) => RankAnchor.fromJson(_mapOf(e)))
+        .where((a) => a.uid > 0 && a.nickname.isNotEmpty)
+        .toList();
+    return RankAnchorsPage(
+      anchors: anchors,
+      pageId: pageId,
+      maxPageId: intOf(json['maxPageId']),
+    );
+  }
+}
+
 /// 分类页数据：从 heterogenous cards 里提取专辑卡与标签词
 class CategoryPageData {
   final List<CategoryAlbum> albums;

@@ -221,6 +221,69 @@ class XimalayaService {
     return MetaAlbumsPage.fromJson(json, pageId: pageId);
   }
 
+  /// 聚合榜目录（文档 §2.9 实测）：7 个聚合榜，各榜 rankGroups 给出
+  /// 各分类的 rankingListId；实力主播（anchorOrNot）的 rankGroups 是
+  /// 主播分组而非内容分类。目录与具体分类无关，一次拉取后本地过滤。
+  Future<List<RankAggregate>> fetchRankCatalog() async {
+    final json = await _getJson(
+      '$_mobile/discovery-category/aggregateRankList/v2/AggregateRankListTabs',
+      query: {
+        'device': 'android',
+        'version': appVersion,
+      },
+    );
+    if (json['ret'] != 0) {
+      throw XmException('${json['msg'] ?? '榜单目录加载失败'}');
+    }
+    return RankAggregate.parseCatalog(json);
+  }
+
+  /// 专辑榜明细（文档 §2.9 实测）：rankingListId 来自目录里该分类的
+  /// 映射，clusterType 是聚合榜自身的类型；翻页参数 pageId，固定 20/页。
+  Future<RankAlbumsPage> fetchRankAlbums({
+    required int rankingListId,
+    required int clusterType,
+    int pageId = 1,
+  }) async {
+    final json = await _getJson(
+      '$_mobile/discovery-category/aggregateRankList/concreteRankList',
+      query: {
+        'rankingListId': '$rankingListId',
+        'clusterType': '$clusterType',
+        'device': 'android',
+        'version': appVersion,
+        if (pageId > 1) 'pageId': '$pageId',
+        'pageSize': '20',
+      },
+    );
+    if (json['ret'] != 0) {
+      throw XmException('${json['msg'] ?? '榜单加载失败'}');
+    }
+    return RankAlbumsPage.fromJson(json, pageId: pageId);
+  }
+
+  /// 实力主播榜明细（文档 §2.9 实测）：rankingListId 是主播分组的 id
+  /// （如有声书主播），翻页参数 pageId。
+  Future<RankAnchorsPage> fetchRankAnchors({
+    required int rankingListId,
+    int pageId = 1,
+  }) async {
+    final json = await _getJson(
+      '$_mobile/discovery-category/aggregateRankList/anchorRankList',
+      query: {
+        'rankingListId': '$rankingListId',
+        'device': 'android',
+        'version': appVersion,
+        if (pageId > 1) 'pageId': '$pageId',
+        'pageSize': '20',
+      },
+    );
+    if (json['ret'] != 0) {
+      throw XmException('${json['msg'] ?? '主播榜加载失败'}');
+    }
+    return RankAnchorsPage.fromJson(json, pageId: pageId);
+  }
+
   // ---------------- 搜索 ----------------
 
   /// 搜索首页热词（文档 §1.4）：返回热词字符串列表

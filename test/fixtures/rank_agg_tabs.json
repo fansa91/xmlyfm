@@ -1,0 +1,396 @@
+{
+ "msg": "0",
+ "ret": 0,
+ "data": {
+  "aggregateRankList": [
+   {
+    "aggregateListConfig": {
+     "aggregateName": "热播榜",
+     "anchorOrNot": false,
+     "clusterType": 12
+    },
+    "rankGroups": [
+     {
+      "categoryId": 0,
+      "contentType": "album",
+      "displayName": "热门",
+      "rankClusterId": 278,
+      "rankingListId": 431,
+      "rankingRule": "hotPlay"
+     },
+     {
+      "categoryId": 3,
+      "contentType": "album",
+      "displayName": "有声书",
+      "rankClusterId": 279,
+      "rankingListId": 432,
+      "rankingRule": "hotPlay"
+     },
+     {
+      "categoryId": 12,
+      "contentType": "album",
+      "displayName": "相声评书",
+      "rankClusterId": 280,
+      "rankingListId": 433,
+      "rankingRule": "hotPlay"
+     }
+    ]
+   },
+   {
+    "aggregateListConfig": {
+     "aggregateName": "畅销榜",
+     "anchorOrNot": false,
+     "clusterType": 13
+    },
+    "rankGroups": [
+     {
+      "categoryId": 0,
+      "contentType": "album",
+      "displayName": "热门",
+      "rankClusterId": 333,
+      "rankingListId": 484,
+      "rankingRule": "hotSale"
+     },
+     {
+      "categoryId": 0,
+      "contentType": "album",
+      "displayName": "新品",
+      "rankClusterId": 334,
+      "rankingListId": 485,
+      "rankingRule": "newQuality"
+     },
+     {
+      "categoryId": 0,
+      "contentType": "album",
+      "displayName": "VIP",
+      "rankClusterId": 335,
+      "rankingListId": 486,
+      "rankingRule": "importNew"
+     },
+     {
+      "categoryId": 0,
+      "contentType": "album",
+      "displayName": "飙升",
+      "rankClusterId": 336,
+      "rankingListId": 487,
+      "rankingRule": "totalOrder"
+     },
+     {
+      "categoryId": 3,
+      "contentType": "album",
+      "displayName": "有声书",
+      "rankClusterId": 337,
+      "rankingListId": 488,
+      "rankingRule": "totalProfit"
+     },
+     {
+      "categoryId": 46,
+      "contentType": "album",
+      "displayName": "畅销书",
+      "rankClusterId": 338,
+      "rankingListId": 489,
+      "rankingRule": "totalProfit"
+     },
+     {
+      "categoryId": 39,
+      "contentType": "album",
+      "displayName": "人文",
+      "rankClusterId": 339,
+      "rankingListId": 490,
+      "rankingRule": "totalProfit"
+     },
+     {
+      "categoryId": 13,
+      "contentType": "album",
+      "displayName": "个人成长",
+      "rankClusterId": 340,
+      "rankingListId": 491,
+      "rankingRule": "totalProfit"
+     },
+     {
+      "categoryId": 8,
+      "contentType": "album",
+      "displayName": "商业财经",
+      "rankClusterId": 341,
+      "rankingListId": 492,
+      "rankingRule": "totalProfit"
+     },
+     {
+      "categoryId": 9,
+      "contentType": "album",
+      "displayName": "历史",
+      "rankClusterId": 342,
+      "rankingListId": 493,
+      "rankingRule": "totalProfit"
+     },
+     {
+      "categoryId": 47,
+      "contentType": "album",
+      "displayName": "外语",
+      "rankClusterId": 343,
+      "rankingListId": 494,
+      "rankingRule": "totalProfit"
+     },
+     {
+      "categoryId": 6,
+      "contentType": "album",
+      "displayName": "亲子教育",
+      "rankClusterId": 344,
+      "rankingListId": 495,
+      "rankingRule": "totalProfit"
+     },
+     {
+      "categoryId": 12,
+      "contentType": "album",
+      "displayName": "相声评书",
+      "rankClusterId": 345,
+      "rankingListId": 496,
+      "rankingRule": "totalProfit"
+     },
+     {
+      "categoryId": 59,
+      "contentType": "album",
+      "displayName": "艺术",
+      "rankClusterId": 346,
+      "rankingListId": 497,
+      "rankingRule": "totalProfit"
+     },
+     {
+      "categoryId": 2,
+      "contentType": "album",
+      "displayName": "音乐",
+      "rankClusterId": 352,
+      "rankingListId": 498,
+      "rankingRule": "totalProfit"
+     }
+    ]
+   },
+   {
+    "aggregateListConfig": {
+     "aggregateName": "新品榜",
+     "anchorOrNot": false,
+     "clusterType": 14
+    },
+    "rankGroups": [
+     {
+      "categoryId": 0,
+      "contentType": "album",
+      "displayName": "热门",
+      "rankClusterId": 301,
+      "rankingListId": 454,
+      "rankingRule": "new"
+     },
+     {
+      "categoryId": 3,
+      "contentType": "album",
+      "displayName": "有声书",
+      "rankClusterId": 302,
+      "rankingListId": 455,
+      "rankingRule": "new"
+     },
+     {
+      "categoryId": 12,
+      "contentType": "album",
+      "displayName": "相声评书",
+      "rankClusterId": 303,
+      "rankingListId": 456,
+      "rankingRule": "new"
+     },
+     {
+      "categoryId": 6,
+      "contentType": "album",
+      "displayName": "儿童",
+      "rankClusterId": 304,
+      "rankingListId": 457,
+      "rankingRule": "new"
+     },
+     {
+      "categoryId": 39,
+      "contentType": "album",
+      "displayName": "人文",
+      "rankClusterId": 305,
+      "rankingListId": 458,
+      "rankingRule": "new"
+     },
+     {
+      "categoryId": 9,
+      "contentType": "album",
+      "displayName": "历史",
+      "rankClusterId": 306,
+      "rankingListId": 459,
+      "rankingRule": "new"
+     },
+     {
+      "categoryId": 2,
+      "contentType": "album",
+      "displayName": "音乐",
+      "rankClusterId": 307,
+      "rankingListId": 460,
+      "rankingRule": "new"
+     },
+     {
+      "categoryId": 13,
+      "contentType": "album",
+      "displayName": "教育培训",
+      "rankClusterId": 308,
+      "rankingListId": 461,
+      "rankingRule": "new"
+     },
+     {
+      "categoryId": 5,
+      "contentType": "album",
+      "displayName": "外语",
+      "rankClusterId": 309,
+      "rankingListId": 462,
+      "rankingRule": "new"
+     },
+     {
+      "categoryId": 4,
+      "contentType": "album",
+      "displayName": "娱乐",
+      "rankClusterId": 310,
+      "rankingListId": 463,
+      "rankingRule": "new"
+     },
+     {
+      "categoryId": 10,
+      "contentType": "album",
+      "displayName": "情感生活",
+      "rankClusterId": 311,
+      "rankingListId": 464,
+      "rankingRule": "new"
+     },
+     {
+      "categoryId": 8,
+      "contentType": "album",
+      "displayName": "商业财经",
+      "rankClusterId": 312,
+      "rankingListId": 465,
+      "rankingRule": "new"
+     },
+     {
+      "categoryId": 1,
+      "contentType": "album",
+      "displayName": "头条",
+      "rankClusterId": 313,
+      "rankingListId": 466,
+      "rankingRule": "new"
+     },
+     {
+      "categoryId": 7,
+      "contentType": "album",
+      "displayName": "健康养生",
+      "rankClusterId": 314,
+      "rankingListId": 467,
+      "rankingRule": "new"
+     },
+     {
+      "categoryId": 15,
+      "contentType": "album",
+      "displayName": "广播剧",
+      "rankClusterId": 315,
+      "rankingListId": 468,
+      "rankingRule": "new"
+     },
+     {
+      "categoryId": 16,
+      "contentType": "album",
+      "displayName": "戏曲",
+      "rankClusterId": 316,
+      "rankingListId": 469,
+      "rankingRule": "new"
+     },
+     {
+      "categoryId": 18,
+      "contentType": "album",
+      "displayName": "IT科技",
+      "rankClusterId": 317,
+      "rankingListId": 470,
+      "rankingRule": "new"
+     },
+     {
+      "categoryId": 22,
+      "contentType": "album",
+      "displayName": "旅游",
+      "rankClusterId": 318,
+      "rankingListId": 471,
+      "rankingRule": "new"
+     },
+     {
+      "categoryId": 23,
+      "contentType": "album",
+      "displayName": "影视",
+      "rankClusterId": 319,
+      "rankingListId": 472,
+      "rankingRule": "new"
+     },
+     {
+      "categoryId": 31,
+      "contentType": "album",
+      "displayName": "时尚生活",
+      "rankClusterId": 320,
+      "rankingListId": 473,
+      "rankingRule": "new"
+     },
+     {
+      "categoryId": 21,
+      "contentType": "album",
+      "displayName": "汽车",
+      "rankClusterId": 321,
+      "rankingListId": 474,
+      "rankingRule": "new"
+     },
+     {
+      "categoryId": 24,
+      "contentType": "album",
+      "displayName": "二次元",
+      "rankClusterId": 322,
+      "rankingListId": 475,
+      "rankingRule": "new"
+     }
+    ]
+   },
+   {
+    "aggregateListConfig": {
+     "aggregateName": "实力主播",
+     "anchorOrNot": true,
+     "clusterType": 17
+    },
+    "rankGroups": [
+     {
+      "categoryId": 1002,
+      "contentType": "anchor",
+      "displayName": "有声书主播",
+      "rankClusterId": 326,
+      "rankingListId": 479,
+      "rankingRule": "voiceActor"
+     },
+     {
+      "categoryId": 1005,
+      "contentType": "anchor",
+      "displayName": "人气电台",
+      "rankClusterId": 329,
+      "rankingListId": 482,
+      "rankingRule": "entertainment"
+     },
+     {
+      "categoryId": 1006,
+      "contentType": "anchor",
+      "displayName": "新锐主播",
+      "rankClusterId": 330,
+      "rankingListId": 483,
+      "rankingRule": "newFineQuality"
+     },
+     {
+      "categoryId": 1004,
+      "contentType": "anchor",
+      "displayName": "直播红人",
+      "rankClusterId": 328,
+      "rankingListId": 481,
+      "rankingRule": "livePopularPerson"
+     }
+    ]
+   }
+  ]
+ }
+}

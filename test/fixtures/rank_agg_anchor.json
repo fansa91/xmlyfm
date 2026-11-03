@@ -1,0 +1,52 @@
+{
+ "msg": "0",
+ "ret": 0,
+ "maxPageId": 5,
+ "pageSize": 20,
+ "list": [
+  {
+   "uid": 1266964,
+   "anchorGrade": 16,
+   "vLogoType": 4,
+   "followStatus": 3,
+   "logoPic": "http://imagev2.xmcdn.com/storages/9079-audiofreehighqps/37/16/CMCoOR8EDw_4AADBsgCMSZ9J.jpg!op_type=3&columns=190&rows=190&magick=webp",
+   "nickname": "有声的紫襟",
+   "verified": true,
+   "iting": "iting://open?msg_type=12&uid=1266964",
+   "personDescribe": "平台签约主播  喜马人肉故事机",
+   "verifyType": 2,
+   "followersCounts": 27565209,
+   "tracksCounts": 115016
+  },
+  {
+   "uid": 10778196,
+   "anchorGrade": 15,
+   "vLogoType": 4,
+   "followStatus": 3,
+   "logoPic": "http://imagev2.xmcdn.com/storages/e3fb-audiofreehighqps/89/C9/CMCoOSMDwzqKAAD_VAB2xHVq.jpg!op_type=3&columns=190&rows=190&magick=webp",
+   "nickname": "头陀渊讲故事",
+   "verified": true,
+   "iting": "iting://open?msg_type=12&uid=10778196",
+   "personDescribe": "有声书月度优质主播  2022年度创作者",
+   "verifyType": 2,
+   "followersCounts": 15498428,
+   "tracksCounts": 77354
+  },
+  {
+   "uid": 37504890,
+   "anchorGrade": 15,
+   "vLogoType": 4,
+   "followStatus": 3,
+   "logoPic": "http://imagev2.xmcdn.com/storages/e88d-audiofreehighqps/5E/40/CKwRIasFPJXvAABxCgDsRyYO.jpg!op_type=3&columns=190&rows=190&magick=webp",
+   "nickname": "君颜讲故事",
+   "verified": true,
+   "iting": "iting://open?msg_type=12&uid=37504890",
+   "personDescribe": "有声书月度优质主播",
+   "verifyType": 2,
+   "followersCounts": 6098466,
+   "tracksCounts": 25543
+  }
+ ],
+ "pageId": 1,
+ "totalCount": 100
+}

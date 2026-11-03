@@ -7,6 +7,7 @@ import '../services/ximalaya_service.dart';
 import '../widgets/album_card.dart';
 import '../widgets/detail_scaffold.dart';
 import 'album_screen.dart';
+import 'ranking_screen.dart';
 
 /// 分类页：分类 chips（来自首页页签里带 categoryId 的项）+
 /// 分类内页签（tab/list）+ 分类落地页卡片（queryCategoryPageData）。
@@ -46,6 +47,12 @@ class _CategoryScreenState extends State<CategoryScreen> {
   String? _metaError;
   int _metaLoadSeq = 0;
   final _filterScrollController = ScrollController();
+
+  // ---------- 排行榜入口 ----------
+  // 聚合榜目录与分类无关，整个页面生命周期只拉一次；
+  // 按当前分类过滤出的可看榜单（空 = 该分类无榜，入口不显示）。
+  Future<List<RankAggregate>>? _rankCatalogFuture;
+  List<CategoryRankTab> _rankTabs = [];
 
   XimalayaService get _service => context.read<XimalayaService>();
 
@@ -97,7 +104,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
       _metaAlbums = [];
       _metaError = null;
       _metaLoadSeq++;
+      _rankTabs = [];
     });
+    _loadRankTabs(categoryId);
     try {
       final results = await Future.wait([
         _service.fetchCategoryTabs(categoryId),
@@ -121,6 +130,45 @@ class _CategoryScreenState extends State<CategoryScreen> {
   void _openAlbum(int albumId) {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => AlbumScreen(albumId: albumId)),
+    );
+  }
+
+  // ---------- 排行榜入口逻辑 ----------
+
+  /// 拉聚合榜目录（只拉一次）并按当前分类算出可看的榜单页签。
+  /// 榜单是附加入口：目录加载失败就当作没有榜单，不打扰落地页。
+  Future<void> _loadRankTabs(int categoryId) async {
+    try {
+      final catalog =
+          await (_rankCatalogFuture ??= _service.fetchRankCatalog());
+      if (!mounted || _selectedCategoryId != categoryId) return;
+      setState(() {
+        _rankTabs = RankAggregate.tabsForCategory(catalog, categoryId);
+      });
+    } catch (_) {
+      if (!mounted || _selectedCategoryId != categoryId) return;
+      setState(() => _rankTabs = []);
+    }
+  }
+
+  void _openRanking() {
+    final categoryId = _selectedCategoryId;
+    if (categoryId == null || _rankTabs.isEmpty) return;
+    var name = '';
+    for (final c in _categories) {
+      if (c.categoryId == categoryId) {
+        name = c.title;
+        break;
+      }
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => RankingScreen(
+          categoryId: categoryId,
+          categoryName: name,
+          tabs: List.of(_rankTabs),
+        ),
+      ),
     );
   }
 
@@ -327,6 +375,15 @@ class _CategoryScreenState extends State<CategoryScreen> {
             selected: _filterMode,
             onSelected: (v) => v ? _enterFilter() : _exitFilter(),
           ),
+          if (!_filterMode && _rankTabs.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: ActionChip(
+                avatar: const Icon(Icons.emoji_events, size: 18),
+                label: const Text('排行榜'),
+                onPressed: _openRanking,
+              ),
+            ),
           if (_filterMode && _selection.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(left: 8),
