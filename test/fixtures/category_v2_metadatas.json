@@ -1,0 +1,382 @@
+{
+ "ret": 0,
+ "msg": "成功",
+ "metadatas": [
+  {
+   "displayName": "小说分类",
+   "id": 11510,
+   "metadataValues": [
+    {
+     "displayName": "男频",
+     "id": 5162,
+     "metadataValueType": 1,
+     "metadatas": [
+      {
+       "displayName": "男频",
+       "id": 11486,
+       "metadataValues": [
+        {
+         "displayName": "玄幻",
+         "id": 1274,
+         "metadataValueType": 1,
+         "metadatas": [
+          {
+           "displayName": "玄幻",
+           "id": 11488,
+           "metadataValues": [
+            {
+             "displayName": "东方玄幻",
+             "id": 5258,
+             "metadataValueType": 1,
+             "metadatas": [],
+             "name": "东方玄幻"
+            },
+            {
+             "displayName": "异世大陆",
+             "id": 5255,
+             "metadataValueType": 1,
+             "metadatas": [],
+             "name": "异世大陆"
+            },
+            {
+             "displayName": "诸天万界",
+             "id": 119689,
+             "metadataValueType": 1,
+             "metadatas": [],
+             "name": "诸天万界"
+            },
+            {
+             "displayName": "王朝争霸",
+             "id": 5257,
+             "metadataValueType": 1,
+             "metadatas": [],
+             "name": "王朝争霸"
+            }
+           ],
+           "name": "玄幻"
+          }
+         ],
+         "name": "玄幻"
+        },
+        {
+         "displayName": "奇幻",
+         "id": 1316,
+         "metadataValueType": 1,
+         "metadatas": [
+          {
+           "displayName": "奇幻",
+           "id": 11489,
+           "metadataValues": [
+            {
+             "displayName": "西方奇幻",
+             "id": 5232,
+             "metadataValueType": 1,
+             "metadatas": [],
+             "name": "西方奇幻"
+            },
+            {
+             "displayName": "另类幻想",
+             "id": 5231,
+             "metadataValueType": 1,
+             "metadatas": [],
+             "name": "另类幻想"
+            },
+            {
+             "displayName": "魔法世界",
+             "id": 10886,
+             "metadataValueType": 1,
+             "metadatas": [],
+             "name": "魔法世界"
+            }
+           ],
+           "name": "奇幻"
+          }
+         ],
+         "name": "奇幻"
+        },
+        {
+         "displayName": "武侠",
+         "id": 798,
+         "metadataValueType": 1,
+         "metadatas": [
+          {
+           "displayName": "武侠",
+           "id": 11490,
+           "metadataValues": [
+            {
+             "displayName": "武侠幻想",
+             "id": 5248,
+             "metadataValueType": 1,
+             "metadatas": [],
+             "name": "武侠幻想"
+            },
+            {
+             "displayName": "传统武侠",
+             "id": 5247,
+             "metadataValueType": 1,
+             "metadatas": [],
+             "name": "传统武侠"
+            },
+            {
+             "displayName": "国术无双",
+             "id": 5244,
+             "metadataValueType": 1,
+             "metadatas": [],
+             "name": "国术无双"
+            }
+           ],
+           "name": "武侠"
+          }
+         ],
+         "name": "武侠"
+        },
+        {
+         "displayName": "仙侠",
+         "id": 1433,
+         "metadataValueType": 1,
+         "metadatas": [
+          {
+           "displayName": "仙侠",
+           "id": 11491,
+           "metadataValues": [
+            {
+             "displayName": "古典仙侠",
+             "id": 10206,
+             "metadataValueType": 1,
+             "metadatas": [],
+             "name": "古典仙侠"
+            },
+            {
+             "displayName": "上古洪荒",
+             "id": 713938,
+             "metadataValueType": 1,
+             "metadatas": [],
+             "name": "上古洪荒"
+            },
+            {
+             "displayName": "幻想修仙",
+             "id": 119658,
+             "metadataValueType": 1,
+             "metadatas": [],
+             "name": "幻想修仙"
+            },
+            {
+             "displayName": "现代修真",
+             "id": 5209,
+             "metadataValueType": 1,
+             "metadatas": [],
+             "name": "现代修真"
+            }
+           ],
+           "name": "仙侠"
+          }
+         ],
+         "name": "仙侠"
+        }
+       ],
+       "name": "男频"
+      },
+      {
+       "displayName": "情节",
+       "id": 11505,
+       "metadataValues": [
+        {
+         "displayName": "穿越",
+         "id": 1280,
+         "metadataValueType": 1,
+         "metadatas": [],
+         "name": "穿越"
+        },
+        {
+         "displayName": "重生",
+         "id": 1325,
+         "metadataValueType": 1,
+         "metadatas": [],
+         "name": "重生"
+        },
+        {
+         "displayName": "系统流",
+         "id": 11125,
+         "metadataValueType": 1,
+         "metadatas": [],
+         "name": "系统流"
+        },
+        {
+         "displayName": "脑洞",
+         "id": 4916,
+         "metadataValueType": 1,
+         "metadatas": [],
+         "name": "脑洞"
+        }
+       ],
+       "name": "情节"
+      },
+      {
+       "displayName": "恋爱",
+       "id": 11506,
+       "metadataValues": [
+        {
+         "displayName": "无女主",
+         "id": 229876,
+         "metadataValueType": 1,
+         "metadatas": [],
+         "name": "无女主"
+        },
+        {
+         "displayName": "多女主",
+         "id": 230448,
+         "metadataValueType": 1,
+         "metadatas": [],
+         "name": "多女主"
+        },
+        {
+         "displayName": "单女主",
+         "id": 457652,
+         "metadataValueType": 1,
+         "metadatas": [],
+         "name": "单女主"
+        },
+        {
+         "displayName": "婚恋",
+         "id": 1327,
+         "metadataValueType": 1,
+         "metadatas": [],
+         "name": "婚恋"
+        }
+       ],
+       "name": "恋爱"
+      },
+      {
+       "displayName": "角色",
+       "id": 11507,
+       "metadataValues": [
+        {
+         "displayName": "护花高手",
+         "id": 382226,
+         "metadataValueType": 1,
+         "metadatas": [],
+         "name": "护花高手"
+        },
+        {
+         "displayName": "特种兵",
+         "id": 11084,
+         "metadataValueType": 1,
+         "metadatas": [],
+         "name": "特种兵"
+        },
+        {
+         "displayName": "兵王",
+         "id": 12090,
+         "metadataValueType": 1,
+         "metadatas": [],
+         "name": "兵王"
+        },
+        {
+         "displayName": "特工",
+         "id": 11082,
+         "metadataValueType": 1,
+         "metadatas": [],
+         "name": "特工"
+        }
+       ],
+       "name": "角色"
+      },
+      {
+       "displayName": "风格",
+       "id": 11508,
+       "metadataValues": [
+        {
+         "displayName": "爽文",
+         "id": 1324,
+         "metadataValueType": 1,
+         "metadatas": [],
+         "name": "爽文"
+        },
+        {
+         "displayName": "正剧",
+         "id": 20985,
+         "metadataValueType": 1,
+         "metadatas": [],
+         "name": "正剧"
+        },
+        {
+         "displayName": "励志",
+         "id": 12415,
+         "metadataValueType": 1,
+         "metadatas": [],
+         "name": "励志"
+        },
+        {
+         "displayName": "热血",
+         "id": 1323,
+         "metadataValueType": 1,
+         "metadatas": [],
+         "name": "热血"
+        }
+       ],
+       "name": "风格"
+      },
+      {
+       "displayName": "背景",
+       "id": 11509,
+       "metadataValues": [
+        {
+         "displayName": "年代文",
+         "id": 22011,
+         "metadataValueType": 1,
+         "metadatas": [],
+         "name": "年代文"
+        },
+        {
+         "displayName": "四合院",
+         "id": 137483,
+         "metadataValueType": 1,
+         "metadatas": [],
+         "name": "四合院"
+        },
+        {
+         "displayName": "娱乐圈",
+         "id": 3430,
+         "metadataValueType": 1,
+         "metadatas": [],
+         "name": "娱乐圈"
+        },
+        {
+         "displayName": "星际",
+         "id": 20023,
+         "metadataValueType": 1,
+         "metadatas": [],
+         "name": "星际"
+        }
+       ],
+       "name": "背景"
+      }
+     ],
+     "name": "男频"
+    }
+   ],
+   "name": "小说分类"
+  },
+  {
+   "displayName": "是否完本",
+   "id": 131,
+   "metadataValues": [
+    {
+     "displayName": "完结",
+     "id": 2560,
+     "metadataValueType": 1,
+     "metadatas": [],
+     "name": "true"
+    },
+    {
+     "displayName": "连载中",
+     "id": 2559,
+     "metadataValueType": 1,
+     "metadatas": [],
+     "name": "false"
+    }
+   ],
+   "name": "是否完本"
+  }
+ ]
+}

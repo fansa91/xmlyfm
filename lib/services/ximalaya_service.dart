@@ -174,6 +174,53 @@ class XimalayaService {
     return CategoryPageData.fromJson(json);
   }
 
+  /// 分类筛选元数据树（文档 §2.8 实测）：筛选 UI 的维度与可选值，
+  /// 值可再嵌套子组。
+  Future<List<CategoryMetaGroup>> fetchCategoryMetadatas(
+    int categoryId,
+  ) async {
+    final json = await _getJson(
+      '$_mobile/mobile/discovery/v2/category/metadatas',
+      query: {
+        'categoryId': '$categoryId',
+        'device': 'android',
+        'version': appVersion,
+      },
+    );
+    if (json['ret'] != 0) {
+      throw XmException('${json['msg'] ?? '分类筛选加载失败'}');
+    }
+    return CategoryMetaGroup.parseList(json);
+  }
+
+  /// 元数据筛选专辑列表（文档 §2.8 实测）：[selection] 为
+  /// metadataId → valueId 的已选映射，拼成逗号分隔的
+  /// `metadataId:valueId` 对；未选任何维度时不带 metadatas（全分类）。
+  /// 服务端固定每页 20 条，翻页参数是 pageId。
+  Future<MetaAlbumsPage> fetchMetaAlbums(
+    int categoryId, {
+    Map<int, int> selection = const {},
+    int pageId = 1,
+  }) async {
+    final metadatas = selection.entries
+        .map((e) => '${e.key}:${e.value}')
+        .join(',');
+    final json = await _getJson(
+      '$_mobile/mobile/discovery/v2/category/metadata/albums',
+      query: {
+        'categoryId': '$categoryId',
+        'device': 'android',
+        'version': appVersion,
+        if (metadatas.isNotEmpty) 'metadatas': metadatas,
+        if (pageId > 1) 'pageId': '$pageId',
+      },
+    );
+    if (json['ret'] != 0) {
+      throw XmException('${json['msg'] ?? '筛选结果加载失败'}');
+    }
+    return MetaAlbumsPage.fromJson(json, pageId: pageId);
+  }
+
   // ---------------- 搜索 ----------------
 
   /// 搜索首页热词（文档 §1.4）：返回热词字符串列表
