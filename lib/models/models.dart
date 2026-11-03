@@ -386,6 +386,58 @@ class SearchDoc {
     );
   }
 
+  /// 网页端 revision/search 的一条结果（文档 §1.10）。
+  /// [webCore] 为网页端 core：album / track / user。
+  /// 封面是协议相对地址（//imagev2...），补 https: 前缀；
+  /// 主播条目无专辑/声音 ID（与 front/v1 的 user 结果一样只展示）。
+  factory SearchDoc.fromWebJson(
+    Map<String, dynamic> json, {
+    required String webCore,
+  }) {
+    String coverOf(List<String> keys) {
+      for (final k in keys) {
+        final v = strOf(json[k]);
+        if (v.isNotEmpty) return v.startsWith('//') ? 'https:$v' : v;
+      }
+      return '';
+    }
+
+    switch (webCore) {
+      case 'album':
+        return SearchDoc(
+          albumId: intOf(json['id']),
+          trackId: 0,
+          title: strOf(json['title']),
+          cover: coverOf(['cover_path']),
+          nickname: strOf(json['nickname']),
+          duration: 0,
+          playtimes: intOf(json['play']),
+        );
+      case 'track':
+        return SearchDoc(
+          albumId: intOf(json['album_id']),
+          trackId: intOf(json['id']),
+          title: strOf(json['title']),
+          cover: coverOf(['cover_path', 'album_cover_path']),
+          nickname: strOf(json['nickname']),
+          duration: doubleOf(json['duration']).round(),
+          playtimes: intOf(json['count_play']),
+        );
+      case 'user':
+        return SearchDoc(
+          albumId: 0,
+          trackId: 0,
+          title: strOf(json['nickname']),
+          cover: coverOf(['logoPic', 'smallPic']),
+          nickname: strOf(json['pTtitle']),
+          duration: 0,
+          playtimes: 0,
+        );
+      default:
+        return SearchDoc.fromJson(json);
+    }
+  }
+
   bool get isAlbum => albumId > 0 && trackId == 0;
 
   /// 转成可播放的 Track（无直带 URL，播放时由 PlayResolver 走 baseInfo）
@@ -409,7 +461,14 @@ class SearchPage {
   /// 服务端风控清空（reason=risk:5）时为 true，UI 做空态提示
   final bool riskBlocked;
 
-  const SearchPage({required this.docs, required this.riskBlocked});
+  /// 结果来自网页端回落通道（revision/search）时为 true
+  final bool fromFallback;
+
+  const SearchPage({
+    required this.docs,
+    required this.riskBlocked,
+    this.fromFallback = false,
+  });
 
   factory SearchPage.fromJson(Map<String, dynamic> json, {String core = ''}) {
     final docs = _listOf(_mapOf(json['response'])['docs'])
@@ -420,6 +479,29 @@ class SearchPage {
       docs: docs,
       riskBlocked: strOf(json['reason']).startsWith('risk'),
     );
+  }
+
+  /// 网页端 revision/search 响应（文档 §1.10）。
+  /// 单 core：data.result.response.docs；all：data.result 下
+  /// album/track/user 三组分组返回，合并顺序为专辑 → 声音 → 主播。
+  factory SearchPage.fromWebJson(
+    Map<String, dynamic> json, {
+    required String webCore,
+  }) {
+    final result = _mapOf(_mapOf(json['data'])['result']);
+    List<SearchDoc> parseDocs(dynamic holder, String core) =>
+        _listOf(_mapOf(holder)['docs'])
+            .map((e) => SearchDoc.fromWebJson(_mapOf(e), webCore: core))
+            .where((d) => d.title.isNotEmpty || d.albumId > 0 || d.trackId > 0)
+            .toList();
+    final docs = webCore == 'all'
+        ? [
+            ...parseDocs(result['album'], 'album'),
+            ...parseDocs(result['track'], 'track'),
+            ...parseDocs(result['user'], 'user'),
+          ]
+        : parseDocs(result['response'], webCore);
+    return SearchPage(docs: docs, riskBlocked: false, fromFallback: true);
   }
 }
 

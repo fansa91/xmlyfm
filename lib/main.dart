@@ -23,7 +23,7 @@ void main() async {
   await settings.init();
   final library = LibraryService();
   await library.init();
-  final service = XimalayaService();
+  final service = XimalayaService(deviceId: settings.deviceId);
   final resolver = PlayResolver(service);
   final downloads = DownloadService(resolver, settings);
   await downloads.init();

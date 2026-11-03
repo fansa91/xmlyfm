@@ -1,4 +1,5 @@
 import 'dart:io' show Platform;
+import 'dart:math' show Random;
 
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +19,7 @@ class SettingsService extends ChangeNotifier {
   static const _keyBaseInfoV4 = 'baseinfo_v4';
   static const _keyDownloadFileNameFormat = 'download_filename_format';
   static const _keyDownloadDirectory = 'download_directory';
+  static const _keyDeviceId = 'device_id';
 
   /// 预设主题色
   static const List<ThemePreset> themePresets = [
@@ -122,6 +124,26 @@ class SettingsService extends ChangeNotifier {
         _prefs.getString(_keyDownloadFileNameFormat) ??
         DownloadFileNameFormatter.defaultFormat;
     _downloadDirectory = _prefs.getString(_keyDownloadDirectory) ?? '';
+    _deviceId = _prefs.getString(_keyDeviceId) ?? '';
+    if (_deviceId.isEmpty) {
+      _deviceId = generateDeviceId();
+      await _prefs.setString(_keyDeviceId, _deviceId);
+    }
+  }
+
+  /// 本机设备标识：首启随机生成一次并持久化，之后保持稳定
+  /// （接口公共参数 deviceId 用；全员共用同一个写死值会让所有安装
+  /// 在服务端看来是同一台设备）。
+  String _deviceId = '';
+  String get deviceId => _deviceId;
+
+  /// 生成 32 位十六进制设备标识（形态对齐官方 deviceId 的十六进制串）
+  static String generateDeviceId() {
+    final rnd = Random.secure();
+    return List.generate(
+      32,
+      (_) => rnd.nextInt(16).toRadixString(16),
+    ).join();
   }
 
   /// 通过系统 CorePalette 取种子色，M3 明暗主题分别用 fromSeed 生成

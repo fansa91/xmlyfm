@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' show Random;
 
 import 'package:dio/dio.dart';
 
@@ -26,15 +27,21 @@ class XimalayaService {
   static const String _mobile = 'https://mobile.ximalaya.com';
   static const String _search = 'https://search.ximalaya.com';
   static const String _mpay = 'https://mpay.ximalaya.com';
+  static const String _web = 'https://www.ximalaya.com';
 
-  /// 占位 deviceId：推荐流等接口的必填公共参数（非真实设备标识，
-  /// 访客实测用同形态值可正常返回）。
-  static const String _deviceId = 'a1b2c3d4e5f6a1b2';
+  /// 未注入时的占位 deviceId（形态对齐官方的十六进制设备串）。
+  /// 正常运行由 SettingsService 生成并持久化一台一号后经构造注入，
+  /// 避免全员共用同一个写死值（服务端看来像同一台设备）。
+  static const String _fallbackDeviceId = 'a1b2c3d4e5f6a1b2a1b2c3d4e5f6a1b2';
+
+  /// 本机设备标识（推荐流等接口的必填公共参数）
+  final String deviceId;
 
   final Dio _dio;
 
-  XimalayaService([Dio? dio])
-      : _dio = dio ??
+  XimalayaService({Dio? dio, String? deviceId})
+      : deviceId = deviceId ?? _fallbackDeviceId,
+        _dio = dio ??
             Dio(BaseOptions(
               connectTimeout: const Duration(seconds: 15),
               receiveTimeout: const Duration(seconds: 30),
@@ -111,7 +118,7 @@ class XimalayaService {
       '$_mobile/discovery-feed/v4/mix',
       query: {
         'appid': '0',
-        'deviceId': _deviceId,
+        'deviceId': deviceId,
         'version': appVersion,
         'scale': '1',
         'categoryId': '-2',
@@ -145,7 +152,7 @@ class XimalayaService {
         'device': 'android',
         'version': appVersion,
         'channel': channel,
-        'deviceId': _deviceId,
+        'deviceId': deviceId,
       },
     );
     if ('${json['code']}' != '0') {
@@ -253,18 +260,43 @@ class XimalayaService {
     return SearchCoreTab.parseList(json);
   }
 
-  /// 主搜索（文档 §1.1）。风控 reason=risk:5 时返回空 docs 并标 riskBlocked，
-  /// 不抛异常，UI 做空态兜底。
+  /// 当前搜索会话 ID（官方 searchId）：page=1 时新生成，翻页复用。
+  String _searchId = '';
+
+  /// 上一页响应回传的 searchMeta（官方仅 page>1 时带，值来自响应，
+  /// 响应没给就不带，不臆造）。
+  String _searchMeta = '';
+
+  static String _randomHex(int len) {
+    final rnd = Random.secure();
+    return List.generate(len, (_) => rnd.nextInt(16).toRadixString(16)).join();
+  }
+
+  /// 对齐官方 URLEncoder.encode 的编码（空格为 +，其余走百分号编码）
+  static String _urlEncode(String s) =>
+      Uri.encodeComponent(s).replaceAll('%20', '+');
+
+  /// 主搜索（文档 §1.1）。参数按 APK 代码补齐（kw 编码、searchId 会话、
+  /// sourceId、extraParam、newDevice、page>1 回传 searchMeta）。
+  /// 风控 reason=risk:5 或结果为空时自动回落网页端搜索（文档 §1.10），
+  /// 回落成功返回网页结果（fromFallback=true）；回落不可用/失败时
+  /// 返回原始结果（保留 riskBlocked，UI 做空态兜底）。
   Future<SearchPage> search(
     String kw, {
     String core = 'chosen3',
     int page = 1,
   }) async {
     final isChosen = core == 'chosen3';
+    if (page == 1) {
+      _searchId = _randomHex(32);
+      _searchMeta = '';
+    } else if (_searchId.isEmpty) {
+      _searchId = _randomHex(32);
+    }
     final json = await _postJson(
       '$_search/hub/front/v1',
       body: {
-        'kw': kw,
+        'kw': _urlEncode(kw),
         'plan': isChosen ? 'd' : 'c',
         'spellchecker': 'true',
         'search_version': '7.7',
@@ -277,10 +309,59 @@ class XimalayaService {
         'recall': 'normal',
         'voiceAsinput': 'false',
         'needSemantic': isChosen ? 'false' : 'true',
+        'newDevice': 'false',
+        'searchId': _searchId,
+        'sourceId': '0',
+        'extraParam': <String, dynamic>{
+          'intent': '',
+          'queryLabels': <dynamic>[],
+          'extendClickTimes': 0,
+        },
         if (!isChosen) 'categoryId': '-1',
+        if (page > 1 && _searchMeta.isNotEmpty)
+          'searchMeta': _urlEncode(_searchMeta),
       },
     );
-    return SearchPage.fromJson(json, core: core);
+    final meta = json['searchMeta'];
+    if (meta is String && meta.isNotEmpty) _searchMeta = meta;
+    final result = SearchPage.fromJson(json, core: core);
+    if (!result.riskBlocked && result.docs.isNotEmpty) return result;
+    // 风控清空或无结果：回落网页端 revision/search
+    try {
+      final web = await _searchWeb(kw, core: core, page: page);
+      if (web != null) return web;
+    } catch (_) {
+      // 回落失败不吞原始结果：返回 front/v1 的（可能带 risk 标记）
+    }
+    return result;
+  }
+
+  /// front/v1 的 core → 网页端 revision/search 的 core。
+  /// 网页端只有 album/track/user/all，其余垂类（直播/电子书/视频等）
+  /// 无对应通道，不回落。
+  static const Map<String, String> _webCoreMap = {
+    'chosen3': 'all',
+    'album': 'album',
+    'track': 'track',
+    'user1': 'user',
+    'user2': 'user',
+  };
+
+  /// 网页端搜索回落（文档 §1.10）：访客直通、无需 Cookie。
+  /// 通道不支持该 core 或上游 ret 非 200 时返回 null。
+  Future<SearchPage?> _searchWeb(
+    String kw, {
+    required String core,
+    required int page,
+  }) async {
+    final webCore = _webCoreMap[core];
+    if (webCore == null) return null;
+    final json = await _getJson(
+      '$_web/revision/search',
+      query: {'kw': kw, 'core': webCore, 'page': '$page', 'rows': '20'},
+    );
+    if (json['ret'] != 200) return null;
+    return SearchPage.fromWebJson(json, webCore: webCore);
   }
 
   // ---------------- 专辑 ----------------
