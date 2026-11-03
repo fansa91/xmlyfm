@@ -180,7 +180,10 @@ class LibraryScreen extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
       child: Text(
         title,
-        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+        style: Theme.of(context)
+            .textTheme
+            .titleMedium
+            ?.copyWith(fontWeight: FontWeight.bold),
       ),
     );
   }

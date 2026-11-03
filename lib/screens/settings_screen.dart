@@ -19,27 +19,41 @@ class SettingsScreen extends StatelessWidget {
         appBar: AppBar(title: const Text('设置')),
         body: ListView(
           children: [
-            const ListTile(
-              title: Text('播放', style: TextStyle(fontWeight: FontWeight.bold)),
+            ListTile(
+              title: Text('播放',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.bold)),
             ),
             ListTile(
               leading: const Icon(Icons.high_quality_outlined),
               title: const Text('默认音质'),
               subtitle: Text(Quality.nameOf(settings.defaultQuality)),
-              trailing: DropdownButton<int>(
-                value: settings.defaultQuality,
-                underline: const SizedBox.shrink(),
-                items: Quality.levels
-                    .map(
-                      (level) => DropdownMenuItem(
-                        value: level,
-                        child: Text(Quality.nameOf(level)),
+              trailing: MenuAnchor(
+                builder: (context, controller, _) => TextButton(
+                  onPressed: () => controller.isOpen
+                      ? controller.close()
+                      : controller.open(),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(Quality.nameOf(settings.defaultQuality)),
+                      const Icon(Icons.arrow_drop_down, size: 20),
+                    ],
+                  ),
+                ),
+                menuChildren: [
+                  for (final level in Quality.levels)
+                    MenuItemButton(
+                      leadingIcon: Icon(
+                        level == settings.defaultQuality ? Icons.check : null,
+                        size: 18,
                       ),
-                    )
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) settings.setDefaultQuality(v);
-                },
+                      onPressed: () => settings.setDefaultQuality(level),
+                      child: Text(Quality.nameOf(level)),
+                    ),
+                ],
               ),
             ),
             SwitchListTile(
@@ -50,8 +64,12 @@ class SettingsScreen extends StatelessWidget {
               onChanged: (v) => settings.setBaseInfoV4(v),
             ),
             const Divider(),
-            const ListTile(
-              title: Text('下载', style: TextStyle(fontWeight: FontWeight.bold)),
+            ListTile(
+              title: Text('下载',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.bold)),
             ),
             ListTile(
               leading: const Icon(Icons.drive_file_rename_outline),
@@ -71,8 +89,12 @@ class SettingsScreen extends StatelessWidget {
               },
             ),
             const Divider(),
-            const ListTile(
-              title: Text('外观', style: TextStyle(fontWeight: FontWeight.bold)),
+            ListTile(
+              title: Text('外观',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.bold)),
             ),
             ListTile(
               leading: const Icon(Icons.palette_outlined),
@@ -86,8 +108,12 @@ class SettingsScreen extends StatelessWidget {
               ),
             ),
             const Divider(),
-            const ListTile(
-              title: Text('关于', style: TextStyle(fontWeight: FontWeight.bold)),
+            ListTile(
+              title: Text('关于',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.bold)),
             ),
             const ListTile(
               leading: Icon(Icons.info_outline),

@@ -208,7 +208,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: ChoiceChip(
-                    label: Text(cat.name, style: const TextStyle(fontSize: 12)),
+                    label: Text(cat.name),
                     selected: cat.categoryId == _bbCategoryId,
                     onSelected: (_) => _loadBillboard(cat.categoryId),
                   ),
@@ -229,19 +229,19 @@ class _SearchScreenState extends State<SearchScreen> {
                 width: 28,
                 child: Text(
                   '${i + 1}',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: i < 3
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: i < 3
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                 ),
               ),
               title: Text(_bbItems[i].word,
                   maxLines: 1, overflow: TextOverflow.ellipsis),
               trailing: _bbItems[i].shift > 0
-                  ? const Icon(Icons.whatshot, size: 16, color: Colors.orange)
+                  ? Icon(Icons.whatshot,
+                      size: 16, color: Theme.of(context).colorScheme.error)
                   : null,
               onTap: () => _submit(_bbItems[i].word),
             ),

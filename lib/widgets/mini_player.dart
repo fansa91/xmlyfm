@@ -28,18 +28,11 @@ class MiniPlayer extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 顶部细进度条
-            SizedBox(
-              height: 2,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: FractionallySizedBox(
-                  widthFactor: progress,
-                  child: Container(
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-              ),
+            // 顶部细进度条（原生 LinearProgressIndicator）
+            LinearProgressIndicator(
+              value: progress,
+              minHeight: 2,
+              backgroundColor: theme.colorScheme.surfaceContainer,
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -60,10 +53,8 @@ class MiniPlayer extends StatelessWidget {
                           track.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
+                          style: theme.textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w500),
                         ),
                         const SizedBox(height: 2),
                         Text(
@@ -72,8 +63,7 @@ class MiniPlayer extends StatelessWidget {
                               : track.nickname,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12,
+                          style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),

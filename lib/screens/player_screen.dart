@@ -79,8 +79,7 @@ class PlayerScreen extends StatelessWidget {
                     textAlign: TextAlign.center,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 19,
+                    style: theme.textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.bold,
                       height: 1.3,
                     ),
@@ -88,8 +87,7 @@ class PlayerScreen extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     track.nickname,
-                    style: TextStyle(
-                      fontSize: 14,
+                    style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
@@ -109,9 +107,8 @@ class PlayerScreen extends StatelessWidget {
                     Text(
                       player.errorMessage!,
                       textAlign: TextAlign.center,
-                      style: TextStyle(
+                      style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.error,
-                        fontSize: 13,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -143,8 +140,7 @@ class PlayerScreen extends StatelessWidget {
       child: Text(
         result?.notice ?? '付费内容，仅支持试听 ${result?.sampleDuration ?? 0} 秒',
         textAlign: TextAlign.center,
-        style: TextStyle(
-          fontSize: 12.5,
+        style: theme.textTheme.bodySmall?.copyWith(
           color: theme.colorScheme.onTertiaryContainer,
         ),
       ),
@@ -173,11 +169,11 @@ class PlayerScreen extends StatelessWidget {
             children: [
               Text(
                 formatDuration(player.position),
-                style: const TextStyle(fontSize: 12),
+                style: Theme.of(context).textTheme.bodySmall,
               ),
               Text(
                 duration != null ? formatDuration(duration) : '--:--',
-                style: const TextStyle(fontSize: 12),
+                style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
           ),
@@ -225,20 +221,36 @@ class PlayerScreen extends StatelessWidget {
   };
 
   Widget _buildExtraRow(BuildContext context, PlayerService player) {
+    final theme = Theme.of(context);
+    const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0];
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Text('倍速', style: TextStyle(fontSize: 13)),
+        Text('倍速', style: theme.textTheme.labelLarge),
         const SizedBox(width: 8),
-        DropdownButton<double>(
-          value: player.speed,
-          underline: const SizedBox.shrink(),
-          items: const [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0]
-              .map((s) => DropdownMenuItem(value: s, child: Text('${s}x')))
-              .toList(),
-          onChanged: (v) {
-            if (v != null) player.setSpeed(v);
-          },
+        MenuAnchor(
+          builder: (context, controller, _) => TextButton(
+            onPressed: () =>
+                controller.isOpen ? controller.close() : controller.open(),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('${player.speed}x'),
+                const Icon(Icons.arrow_drop_down, size: 20),
+              ],
+            ),
+          ),
+          menuChildren: [
+            for (final s in speeds)
+              MenuItemButton(
+                leadingIcon: Icon(
+                  s == player.speed ? Icons.check : null,
+                  size: 18,
+                ),
+                onPressed: () => player.setSpeed(s),
+                child: Text('${s}x'),
+              ),
+          ],
         ),
       ],
     );
@@ -248,16 +260,13 @@ class PlayerScreen extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Text('音质', style: TextStyle(fontSize: 13)),
+        Text('音质', style: Theme.of(context).textTheme.labelLarge),
         const SizedBox(width: 8),
         for (final level in Quality.levels)
           Padding(
             padding: const EdgeInsets.only(right: 6),
             child: ChoiceChip(
-              label: Text(
-                Quality.nameOf(level),
-                style: const TextStyle(fontSize: 12),
-              ),
+              label: Text(Quality.nameOf(level)),
               selected: player.quality == level,
               onSelected: (_) => player.setQuality(level),
             ),
@@ -280,10 +289,10 @@ class PlayerScreen extends StatelessWidget {
                   children: [
                     Text(
                       '播放队列（${player.queue.length}）',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
                     ),
                     const Spacer(),
                     TextButton(

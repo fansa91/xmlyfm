@@ -21,7 +21,13 @@ class MiniBadge extends StatelessWidget {
         border: Border.all(color: c, width: 0.7),
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Text(text, style: TextStyle(fontSize: 10, color: c, height: 1.2)),
+      child: Text(
+        text,
+        style: Theme.of(context)
+            .textTheme
+            .labelSmall
+            ?.copyWith(color: c, height: 1.2),
+      ),
     );
   }
 }
@@ -79,8 +85,7 @@ class TrackTile extends StatelessWidget {
                     )
                   : Text(
                       indexLabel != null ? '$indexLabel' : '',
-                      style: TextStyle(
-                        fontSize: 13,
+                      style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
@@ -90,8 +95,7 @@ class TrackTile extends StatelessWidget {
         track.title,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: 14.5,
+        style: theme.textTheme.bodyMedium?.copyWith(
           fontWeight: isCurrent ? FontWeight.w600 : FontWeight.normal,
           color: isCurrent ? theme.colorScheme.primary : null,
         ),
@@ -108,8 +112,7 @@ class TrackTile extends StatelessWidget {
             const SizedBox(width: 3),
             Text(
               formatPlayCount(track.playtimes),
-              style: TextStyle(
-                fontSize: 12,
+              style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
@@ -122,8 +125,7 @@ class TrackTile extends StatelessWidget {
             const SizedBox(width: 3),
             Text(
               formatSeconds(track.duration),
-              style: TextStyle(
-                fontSize: 12,
+              style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),

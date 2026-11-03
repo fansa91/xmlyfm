@@ -88,29 +88,23 @@ ThemeData buildTheme({
       backgroundColor: bg,
       elevation: 0,
       centerTitle: true,
-      titleTextStyle: TextStyle(
-        fontSize: 17,
-        fontWeight: FontWeight.w600,
-        color: scheme.onSurface,
-      ),
-      iconTheme: IconThemeData(color: scheme.onSurface),
+      // 标题与图标不覆写：走 M3 默认（titleLarge + onSurface）
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: bg,
       elevation: 8,
-      indicatorColor: scheme.primary.withValues(alpha: 0.25),
+      indicatorColor: scheme.secondaryContainer,
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         final selected = states.contains(WidgetState.selected);
         return TextStyle(
           fontSize: 12,
           fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-          color: selected ? scheme.primary : Colors.grey,
+          color: selected
+              ? scheme.onSurface
+              : scheme.onSurfaceVariant,
         );
       }),
-      iconTheme: WidgetStateProperty.resolveWith((states) {
-        final selected = states.contains(WidgetState.selected);
-        return IconThemeData(color: selected ? scheme.primary : Colors.grey);
-      }),
+      // 图标不覆写：走 M3 默认（未选 onSurfaceVariant / 选中 onSecondaryContainer）
     ),
     cardTheme: CardThemeData(
       color: cardColor,
@@ -121,20 +115,13 @@ ThemeData buildTheme({
       thickness: 0.5,
       space: 0,
     ),
-    sliderTheme: SliderThemeData(
-      activeTrackColor: scheme.primary,
-      inactiveTrackColor: scheme.onSurface.withValues(alpha: 0.24),
-      thumbColor: scheme.primary,
-      overlayColor: scheme.primary.withValues(alpha: 0.2),
-      trackHeight: 3,
-      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-    ),
+    // Slider 不覆写：走 M3 默认轨道/滑块形态与配色（primary 系）
     progressIndicatorTheme: ProgressIndicatorThemeData(
       color: scheme.primary,
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: cardColor,
+      fillColor: scheme.surfaceContainerHigh,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
         borderSide: BorderSide.none,

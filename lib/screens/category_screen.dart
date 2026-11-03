@@ -161,7 +161,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
           return Padding(
             padding: const EdgeInsets.only(right: 8),
             child: FilterChip(
-              label: Text(tab.name, style: const TextStyle(fontSize: 12)),
+              label: Text(tab.name),
               selected: selected,
               onSelected: (v) =>
                   setState(() => _selectedSubTab = v ? tab.name : null),
@@ -191,7 +191,10 @@ class _CategoryScreenState extends State<CategoryScreen> {
             padding: const EdgeInsets.only(bottom: 8),
             child: Text(
               _selectedSubTab!,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold),
             ),
           ),
         if (data.tags.isNotEmpty) ...[
@@ -200,7 +203,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
             runSpacing: 8,
             children: data.tags
                 .map((t) => Chip(
-                      label: Text(t, style: const TextStyle(fontSize: 12)),
+                      label: Text(t),
                       visualDensity: VisualDensity.compact,
                     ))
                 .toList(),

@@ -110,11 +110,10 @@ class _SectionTitle extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Text(
         text,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: Theme.of(context).colorScheme.primary,
-        ),
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).colorScheme.primary,
+            ),
       ),
     );
   }
@@ -134,25 +133,32 @@ class _ColorDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final checkColor =
+        ThemeData.estimateBrightnessForColor(color) == Brightness.dark
+            ? Colors.white
+            : Colors.black;
     return Tooltip(
       message: label,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-            border: selected
-                ? Border.all(
-                    color: Theme.of(context).colorScheme.onSurface,
-                    width: 2.5)
+      child: Material(
+        color: color,
+        shape: CircleBorder(
+          side: selected
+              ? BorderSide(
+                  color: Theme.of(context).colorScheme.onSurface,
+                  width: 2.5)
+              : BorderSide.none,
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: selected
+                ? Icon(Icons.check, color: checkColor, size: 20)
                 : null,
           ),
-          child: selected
-              ? const Icon(Icons.check, color: Colors.white, size: 20)
-              : null,
         ),
       ),
     );

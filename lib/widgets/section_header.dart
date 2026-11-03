@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../core/theme.dart';
-
 /// 区块标题行：标题 + 右侧"更多"
 class SectionHeader extends StatelessWidget {
   final String title;
@@ -11,26 +9,32 @@ class SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 8, 6),
       child: Row(
         children: [
           Text(
             title,
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+            style: theme.textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.bold),
           ),
           const Spacer(),
           if (onMore != null)
             TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: theme.colorScheme.onSurfaceVariant,
+              ),
               onPressed: onMore,
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('更多',
-                      style: TextStyle(
-                          color: AppColors.textSecondary, fontSize: 13)),
-                  Icon(Icons.chevron_right,
-                      size: 16, color: AppColors.textSecondary),
+                  const Text('更多'),
+                  Icon(
+                    Icons.chevron_right,
+                    size: 16,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ],
               ),
             ),
