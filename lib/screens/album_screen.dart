@@ -17,10 +17,24 @@ import '../widgets/detail_scaffold.dart';
 import '../widgets/download_button.dart';
 import '../widgets/track_tile.dart';
 
+/// 相关推荐选片：同分类落地页的专辑里排除当前专辑、保序取前 [limit] 个。
+List<CategoryAlbum> pickRelatedAlbums(
+  CategoryPageData data, {
+  required int currentAlbumId,
+  int limit = 6,
+}) {
+  return data.albums
+      .where((a) => a.albumId > 0 && a.albumId != currentAlbumId)
+      .take(limit)
+      .toList();
+}
+
 /// 专辑页。
 /// - 移动端（<900）：沉浸头部区（封面模糊背景 + 数据芯片 + 操作行 +
 ///   简介入口，固定约屏高 1/4）+ 节目列表独立滚动（余下 3/4）。
-/// - 宽屏（≥900）：普通 AppBar + 左信息栏 / 右列表双栏。
+/// - 宽屏（≥900）：横幅型——顶部全宽沉浸横幅（模糊封面底 + 大封面 +
+///   标题 / 数据芯片 / 操作行），下方左节目列表 / 右信息卡栏
+///   （专辑简介 / 主播 / 相关推荐）双栏。
 /// - 列表分页加载（服务端恒正序拉取），正序/倒序为本地重排已加载列表，
 ///   集号按数据顺序走；点节目以当前显示顺序为队列播放。
 /// - 每行带单集下载状态按钮；多选模式（操作行按钮或长按进入）可批量
@@ -49,6 +63,10 @@ class _AlbumScreenState extends State<AlbumScreen> {
   bool _selectMode = false;
   final Set<int> _selected = {};
 
+  /// 相关推荐（宽屏右栏）：null = 未加载，空 = 无可推荐 / 拉取失败（整卡隐藏）
+  List<CategoryAlbum>? _related;
+  int _relatedToken = 0;
+
   XimalayaService get _service => context.read<XimalayaService>();
 
   @override
@@ -70,6 +88,8 @@ class _AlbumScreenState extends State<AlbumScreen> {
       _error = null;
       _selectMode = false;
       _selected.clear();
+      _related = null;
+      _relatedToken++;
     });
     try {
       final page = await _service.fetchAlbumTracks(
@@ -89,12 +109,33 @@ class _AlbumScreenState extends State<AlbumScreen> {
         _hasMore = page.hasMore;
         _loading = false;
       });
+      _loadRelated(page.album);
     } on XmException catch (e) {
       if (!mounted) return;
       setState(() {
         _error = e.message;
         _loading = false;
       });
+    }
+  }
+
+  /// 相关推荐：按专辑分类拉同分类专辑（分类落地页既有接口），
+  /// 失败 / 无分类时静默置空——右栏整卡不显示，不打扰主流程。
+  Future<void> _loadRelated(AlbumInfo album) async {
+    final token = _relatedToken;
+    if (album.categoryId <= 0) {
+      if (mounted) setState(() => _related = const []);
+      return;
+    }
+    try {
+      final data = await _service.fetchCategoryPage(album.categoryId);
+      if (!mounted || token != _relatedToken) return;
+      setState(() {
+        _related = pickRelatedAlbums(data, currentAlbumId: album.albumId);
+      });
+    } catch (_) {
+      if (!mounted || token != _relatedToken) return;
+      setState(() => _related = const []);
     }
   }
 
@@ -261,13 +302,10 @@ class _AlbumScreenState extends State<AlbumScreen> {
 
   Widget _buildBody({bool wide = false}) {
     final album = _album;
-    if (wide && album != null && !_loading && _error == null) {
-      return _buildWideBody(album);
+    if (album != null && !_loading && _error == null) {
+      return wide ? _buildWideBannerBody(album) : _buildMobileBody(album);
     }
-    if (wide) {
-      // 宽屏未就绪态（加载 / 错误 / 不存在）：整幅状态占位
-      return CustomScrollView(slivers: [_buildStateSliver()]);
-    }
+    // 未就绪态（加载 / 错误 / 不存在）：两档共用整幅居中占位
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -283,11 +321,12 @@ class _AlbumScreenState extends State<AlbumScreen> {
         ),
       );
     }
-    if (album == null) {
-      return const Center(child: Text('专辑不存在'));
-    }
-    // 移动端比例布局：头部区固定（约屏高 1/4，不滚动），
-    // 声音列表占余下 3/4 独立滚动。
+    return const Center(child: Text('专辑不存在'));
+  }
+
+  /// 移动端比例布局：头部区固定（约屏高 1/4，不滚动），
+  /// 声音列表占余下 3/4 独立滚动。
+  Widget _buildMobileBody(AlbumInfo album) {
     return Column(
       children: [
         if (_selectMode)
@@ -306,32 +345,46 @@ class _AlbumScreenState extends State<AlbumScreen> {
     );
   }
 
-  /// 宽屏未就绪态的占位 sliver（加载 / 错误 / 不存在）
-  Widget _buildStateSliver() {
-    if (_loading) {
-      return const SliverFillRemaining(
-        hasScrollBody: false,
-        child: Center(child: CircularProgressIndicator()),
-      );
-    }
-    if (_error != null) {
-      return SliverFillRemaining(
-        hasScrollBody: false,
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+  /// 宽屏横幅型：顶部全宽沉浸横幅（多选模式换成选择头卡），
+  /// 下方左节目列表 / 右信息卡栏双栏，各自独立滚动。
+  /// 多选底部操作栏仍挂在 Scaffold 上通栏显示。
+  Widget _buildWideBannerBody(AlbumInfo album) {
+    return Column(
+      children: [
+        if (_selectMode)
+          _buildSelectHeader(album)
+        else
+          _buildWideBanner(album),
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(_error!),
-              const SizedBox(height: 12),
-              FilledButton(onPressed: _loadFirst, child: const Text('重试')),
+              Expanded(
+                child: Column(
+                  children: [
+                    _buildListHeader(),
+                    Expanded(
+                      child: ListView.builder(
+                        controller: _scrollController,
+                        itemCount: _tracks.length + (_hasMore ? 1 : 0),
+                        itemBuilder: (context, i) => _buildTrackListItem(i),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const VerticalDivider(thickness: 1, width: 1),
+              SizedBox(
+                width: 340,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: _buildSideRail(album),
+                ),
+              ),
             ],
           ),
         ),
-      );
-    }
-    return const SliverFillRemaining(
-      hasScrollBody: false,
-      child: Center(child: Text('专辑不存在')),
+      ],
     );
   }
 
@@ -345,40 +398,7 @@ class _AlbumScreenState extends State<AlbumScreen> {
     return _buildTrackRow(i);
   }
 
-  /// 宽屏双栏：左栏专辑信息（独立滚动），右栏节目列表（独立滚动）。
-  /// 多选底部操作栏仍挂在 Scaffold 上通栏显示。
-  Widget _buildWideBody(AlbumInfo album) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(
-          width: 360,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-            child: _selectMode
-                ? _buildSelectHeader(album)
-                : _buildHeaderWide(album),
-          ),
-        ),
-        const VerticalDivider(thickness: 1, width: 1),
-        Expanded(
-          child: CustomScrollView(
-            controller: _scrollController,
-            slivers: [
-              if (!_selectMode)
-                SliverToBoxAdapter(child: _buildListHeader()),
-              SliverList.builder(
-                itemCount: _tracks.length + (_hasMore ? 1 : 0),
-                itemBuilder: (context, i) => _buildTrackListItem(i),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// 顶栏内容（leading / 标题 / 动作）：SliverAppBar 与宽屏 AppBar 共用一份。
+  /// 顶栏内容（leading / 标题 / 动作）：宽屏 AppBar 用。
   /// 多选模式下切换为关闭键 + 已选计数。
   ({Widget? leading, Widget title, List<Widget> actions}) _barParts() {
     final album = _album;
@@ -513,12 +533,14 @@ class _AlbumScreenState extends State<AlbumScreen> {
     );
   }
 
-  /// 宽屏顶栏：与 SliverAppBar 同内容，换普通 AppBar 钉在双栏之上
+  /// 宽屏顶栏：普通 AppBar 钉在横幅之上。横幅已含专辑标题，
+  /// 常规模式顶栏不再重复标题（动作保留：多选 / 下载全部 / 更多菜单）；
+  /// 多选模式仍用计数标题 + 关闭键 + 全选。
   PreferredSizeWidget _buildWideAppBar() {
     final parts = _barParts();
     return AppBar(
       leading: parts.leading,
-      title: parts.title,
+      title: _selectMode ? parts.title : null,
       actions: parts.actions,
     );
   }
@@ -540,15 +562,227 @@ class _AlbumScreenState extends State<AlbumScreen> {
     );
   }
 
-  /// 沉浸 hero：封面高斯模糊图作整幅背景 + 深色遮罩保文字可读，
-  /// 其上横排小封面 + 标题 / 主播·分类 / 数据芯片
-  /// （播放量、总集数、分类名——全部取 AlbumInfo 真实字段）。
-  Widget _buildHero(AlbumInfo album) {
+  /// 宽屏沉浸横幅（高 264，固定不滚）：与移动 hero 同手法——
+  /// 模糊封面铺底，左侧大封面，右侧标题 / 主播·分类 / 数据芯片 / 操作行。
+  Widget _buildWideBanner(AlbumInfo album) {
     final theme = Theme.of(context);
-    final total = _totalCount > 0 ? _totalCount : _tracks.length;
     final anchorLine = album.categoryName.isNotEmpty
         ? '${album.nickname} · ${album.categoryName}'
         : album.nickname;
+    return SizedBox(
+      height: 264,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          _blurredCoverBackground(album),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            child: Row(
+              children: [
+                CoverImage(url: album.cover, size: 176, radius: 12),
+                const SizedBox(width: 24),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        album.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          height: 1.25,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        anchorLine,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: Colors.white70,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: _dataChips(album),
+                      ),
+                      _buildActionRow(
+                        album,
+                        padding: const EdgeInsets.only(top: 10),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 宽屏右栏：专辑简介 / 主播 / 相关推荐三张 M3 卡，
+  /// 数据缺失（无简介、无主播名、无推荐结果）的卡整卡不显示。
+  Widget _buildSideRail(AlbumInfo album) {
+    final related = _related;
+    final cards = <Widget>[
+      if (album.fullIntro.isNotEmpty) _buildIntroCard(album),
+      if (album.nickname.isNotEmpty) _buildAnchorCard(album),
+      if (related != null && related.isNotEmpty) _buildRelatedCard(related),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < cards.length; i++) ...[
+          if (i > 0) const SizedBox(height: 12),
+          cards[i],
+        ],
+      ],
+    );
+  }
+
+  /// 专辑简介卡：摘要（fullIntro 前 4 行）+ 点击打开简介弹页
+  /// （与移动端同一个弹页，宽屏下限宽居中）。
+  Widget _buildIntroCard(AlbumInfo album) {
+    final theme = Theme.of(context);
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _showIntroPage(album),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text('专辑简介', style: theme.textTheme.titleMedium),
+                  const Spacer(),
+                  Icon(
+                    Icons.chevron_right,
+                    size: 18,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                album.fullIntro,
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyMedium?.copyWith(height: 1.6),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 主播卡：无真实头像字段——用昵称首字作头像字，不造假图；
+  /// 无主播主页可跳，不放死按钮。
+  Widget _buildAnchorCard(AlbumInfo album) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('主播', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: theme.colorScheme.primaryContainer,
+                  foregroundColor: theme.colorScheme.onPrimaryContainer,
+                  child: Text(
+                    String.fromCharCode(album.nickname.runes.first),
+                    style: theme.textTheme.titleMedium,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        album.nickname,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyLarge,
+                      ),
+                      if (album.categoryName.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          album.categoryName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 相关推荐卡：同分类专辑（已排除当前专辑），点击跳对应专辑页。
+  Widget _buildRelatedCard(List<CategoryAlbum> related) {
+    final theme = Theme.of(context);
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+            child: Text('相关推荐', style: theme.textTheme.titleMedium),
+          ),
+          for (final a in related)
+            ListTile(
+              leading: CoverImage(url: a.cover, size: 48, radius: 8),
+              title: Text(
+                a.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: a.nickname.isNotEmpty
+                  ? Text(
+                      a.nickname,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    )
+                  : null,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => AlbumScreen(albumId: a.albumId),
+                ),
+              ),
+            ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  /// 封面高斯模糊图作整幅背景 + 深色遮罩保文字可读
+  /// （移动 hero 与宽屏横幅共用同一实现）。
+  Widget _blurredCoverBackground(AlbumInfo album) {
+    final theme = Theme.of(context);
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -569,6 +803,32 @@ class _AlbumScreenState extends State<AlbumScreen> {
         else
           ColoredBox(color: theme.colorScheme.surfaceContainerHigh),
         ColoredBox(color: Colors.black.withValues(alpha: 0.48)),
+      ],
+    );
+  }
+
+  /// 数据芯片组（播放量、总集数、分类名——全部取 AlbumInfo 真实字段，
+  /// 缺失的不放）：移动 hero 与宽屏横幅共用。
+  List<Widget> _dataChips(AlbumInfo album) {
+    final total = _totalCount > 0 ? _totalCount : _tracks.length;
+    return [
+      if (album.playTimes > 0)
+        _heroChip('${formatPlayCount(album.playTimes)} 播放'),
+      _heroChip('共 $total 集'),
+      if (album.categoryName.isNotEmpty) _heroChip(album.categoryName),
+    ];
+  }
+
+  /// 沉浸 hero：模糊背景之上横排小封面 + 标题 / 主播·分类 / 数据芯片。
+  Widget _buildHero(AlbumInfo album) {
+    final theme = Theme.of(context);
+    final anchorLine = album.categoryName.isNotEmpty
+        ? '${album.nickname} · ${album.categoryName}'
+        : album.nickname;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        _blurredCoverBackground(album),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
           child: Row(
@@ -603,13 +863,7 @@ class _AlbumScreenState extends State<AlbumScreen> {
                     Wrap(
                       spacing: 6,
                       runSpacing: 4,
-                      children: [
-                        if (album.playTimes > 0)
-                          _heroChip('${formatPlayCount(album.playTimes)} 播放'),
-                        _heroChip('共 $total 集'),
-                        if (album.categoryName.isNotEmpty)
-                          _heroChip(album.categoryName),
-                      ],
+                      children: _dataChips(album),
                     ),
                   ],
                 ),
@@ -639,11 +893,15 @@ class _AlbumScreenState extends State<AlbumScreen> {
 
   /// 操作行：填充大按钮「播放全部」+ 收藏 / 多选下载 / 分享三个
   /// filledTonal 图标圆钮（功能与原 TopBar + 按钮行一致）。
-  Widget _buildActionRow(AlbumInfo album) {
+  /// 移动端头部与宽屏横幅共用同一批回调与状态，仅内边距不同。
+  Widget _buildActionRow(
+    AlbumInfo album, {
+    EdgeInsets padding = const EdgeInsets.fromLTRB(16, 8, 16, 2),
+  }) {
     final theme = Theme.of(context);
     final isFav = context.watch<LibraryService>().isFavorite(album.albumId);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 2),
+      padding: padding,
       child: Row(
         children: [
           Expanded(
@@ -726,11 +984,15 @@ class _AlbumScreenState extends State<AlbumScreen> {
 
   /// 简介弹页：近全屏 modal sheet，有标题栏「专辑简介」、可滚动正文、
   /// 关闭返回。正文用完整简介 fullIntro（introRich 剥 HTML 所得）。
+  /// 宽屏（≥900）下弹页限宽居中，移动端不限宽。
   void _showIntroPage(AlbumInfo album) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      constraints: isExpanded(context)
+          ? const BoxConstraints(maxWidth: 640)
+          : null,
       builder: (sheetContext) {
         final theme = Theme.of(sheetContext);
         final height = MediaQuery.sizeOf(sheetContext).height * 0.92;
@@ -766,93 +1028,6 @@ class _AlbumScreenState extends State<AlbumScreen> {
           ),
         );
       },
-    );
-  }
-
-  /// 专辑徽章行（分类 / 付费 / 会员免费）：双栏与单列共用
-  Widget _buildBadges(AlbumInfo album) {
-    final theme = Theme.of(context);
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: [
-        if (album.categoryName.isNotEmpty)
-          MiniBadge(album.categoryName, color: theme.colorScheme.secondary),
-        if (album.isPaid) const MiniBadge('付费专辑'),
-        if (album.isVipFree)
-          MiniBadge('会员免费', color: theme.colorScheme.tertiary),
-      ],
-    );
-  }
-
-  /// 「全部播放 / 收藏」按钮行：双栏与单列共用
-  Widget _buildPlayFavRow(AlbumInfo album, bool isFav) {
-    return Row(
-      children: [
-        Expanded(
-          child: FilledButton.icon(
-            onPressed: _tracks.isEmpty ? null : () => _playAt(0),
-            icon: const Icon(Icons.play_arrow),
-            label: const Text('全部播放'),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: FilledButton.tonalIcon(
-            onPressed: () =>
-                context.read<LibraryService>().toggleFavorite(album),
-            icon: Icon(isFav ? Icons.favorite : Icons.favorite_border),
-            label: Text(isFav ? '已收藏' : '收藏'),
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// 宽屏左栏头信息：大封面 + 标题 / 主播 / 统计 + 按钮 + 简介（纵向排布）
-  Widget _buildHeaderWide(AlbumInfo album) {
-    final theme = Theme.of(context);
-    final isFav = context.watch<LibraryService>().isFavorite(album.albumId);
-    final total = _totalCount > 0 ? _totalCount : _tracks.length;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        CoverImage(url: album.cover, size: 320, radius: 16),
-        const SizedBox(height: 16),
-        Text(
-          album.title,
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.bold,
-            height: 1.3,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          album.nickname,
-          style: TextStyle(
-            fontSize: 13,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          '共 $total 集${album.playTimes > 0 ? ' · ${formatPlayCount(album.playTimes)}次播放' : ''}',
-          style: TextStyle(
-            fontSize: 12.5,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 8),
-        _buildBadges(album),
-        const SizedBox(height: 14),
-        _buildPlayFavRow(album, isFav),
-        if (album.fullIntro.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          _buildIntroEntry(album),
-        ],
-      ],
     );
   }
 
