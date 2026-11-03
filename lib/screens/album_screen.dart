@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/responsive.dart';
 import '../core/utils.dart';
 import '../models/models.dart';
 import '../services/download_service.dart';
@@ -230,20 +231,27 @@ class _AlbumScreenState extends State<AlbumScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 宽屏（≥900）：顶栏换普通 AppBar、内容转左右双栏；
+    // 紧凑 / 中等档保持 SliverAppBar + 单列形态不变。
+    final wide = isExpanded(context);
     return DetailScaffold(
       child: Scaffold(
+        appBar: wide ? _buildWideAppBar() : null,
         bottomNavigationBar: _selectMode ? _buildSelectBar() : null,
-        body: _buildBody(),
+        body: _buildBody(wide: wide),
       ),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody({bool wide = false}) {
     final album = _album;
+    if (wide && album != null && !_loading && _error == null) {
+      return _buildWideBody(album);
+    }
     return CustomScrollView(
       controller: _scrollController,
       slivers: [
-        _buildTopBar(),
+        if (!wide) _buildTopBar(),
         if (_loading)
           const SliverFillRemaining(
             hasScrollBody: false,
@@ -277,27 +285,62 @@ class _AlbumScreenState extends State<AlbumScreen> {
           ],
           SliverList.builder(
             itemCount: _tracks.length + (_hasMore ? 1 : 0),
-            itemBuilder: (context, i) {
-              if (i >= _tracks.length) {
-                return const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-              return _buildTrackRow(i);
-            },
+            itemBuilder: (context, i) => _buildTrackListItem(i),
           ),
         ],
       ],
     );
   }
 
-  /// M3 TopBar：原生 SliverAppBar 钉顶；多选模式下切换为关闭键 + 已选计数
-  Widget _buildTopBar() {
+  Widget _buildTrackListItem(int i) {
+    if (i >= _tracks.length) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    return _buildTrackRow(i);
+  }
+
+  /// 宽屏双栏：左栏专辑信息（独立滚动），右栏节目列表（独立滚动）。
+  /// 多选底部操作栏仍挂在 Scaffold 上通栏显示。
+  Widget _buildWideBody(AlbumInfo album) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          width: 360,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+            child: _selectMode
+                ? _buildSelectHeader(album)
+                : _buildHeaderWide(album),
+          ),
+        ),
+        const VerticalDivider(thickness: 1, width: 1),
+        Expanded(
+          child: CustomScrollView(
+            controller: _scrollController,
+            slivers: [
+              if (!_selectMode)
+                SliverToBoxAdapter(child: _buildListHeader()),
+              SliverList.builder(
+                itemCount: _tracks.length + (_hasMore ? 1 : 0),
+                itemBuilder: (context, i) => _buildTrackListItem(i),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 顶栏内容（leading / 标题 / 动作）：SliverAppBar 与宽屏 AppBar 共用一份。
+  /// 多选模式下切换为关闭键 + 已选计数。
+  ({Widget? leading, Widget title, List<Widget> actions}) _barParts() {
     final album = _album;
     if (_selectMode) {
-      return SliverAppBar(
-        pinned: true,
+      return (
         leading: IconButton(
           icon: const Icon(Icons.close),
           tooltip: '退出多选',
@@ -315,8 +358,8 @@ class _AlbumScreenState extends State<AlbumScreen> {
     final isFav =
         album != null &&
         context.watch<LibraryService>().isFavorite(widget.albumId);
-    return SliverAppBar(
-      pinned: true,
+    return (
+      leading: null,
       title: Text(album?.title ?? '专辑'),
       actions: [
         IconButton(
@@ -364,6 +407,27 @@ class _AlbumScreenState extends State<AlbumScreen> {
     );
   }
 
+  /// M3 TopBar：原生 SliverAppBar 钉顶（紧凑 / 中等档）
+  Widget _buildTopBar() {
+    final parts = _barParts();
+    return SliverAppBar(
+      pinned: true,
+      leading: parts.leading,
+      title: parts.title,
+      actions: parts.actions,
+    );
+  }
+
+  /// 宽屏顶栏：与 SliverAppBar 同内容，换普通 AppBar 钉在双栏之上
+  PreferredSizeWidget _buildWideAppBar() {
+    final parts = _barParts();
+    return AppBar(
+      leading: parts.leading,
+      title: parts.title,
+      actions: parts.actions,
+    );
+  }
+
   Widget _buildHeader(AlbumInfo album) {
     final theme = Theme.of(context);
     final isFav = context.watch<LibraryService>().isFavorite(album.albumId);
@@ -408,46 +472,14 @@ class _AlbumScreenState extends State<AlbumScreen> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        if (album.categoryName.isNotEmpty)
-                          MiniBadge(
-                            album.categoryName,
-                            color: theme.colorScheme.secondary,
-                          ),
-                        if (album.isPaid) const MiniBadge('付费专辑'),
-                        if (album.isVipFree)
-                          MiniBadge('会员免费', color: theme.colorScheme.tertiary),
-                      ],
-                    ),
+                    _buildBadges(album),
                   ],
                 ),
               ),
             ],
           ),
           const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: _tracks.isEmpty ? null : () => _playAt(0),
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text('全部播放'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton.tonalIcon(
-                  onPressed: () =>
-                      context.read<LibraryService>().toggleFavorite(album),
-                  icon: Icon(isFav ? Icons.favorite : Icons.favorite_border),
-                  label: Text(isFav ? '已收藏' : '收藏'),
-                ),
-              ),
-            ],
-          ),
+          _buildPlayFavRow(album, isFav),
           if (album.intro.isNotEmpty) ...[
             const SizedBox(height: 12),
             Text(
@@ -463,6 +495,100 @@ class _AlbumScreenState extends State<AlbumScreen> {
           ],
         ],
       ),
+    );
+  }
+
+  /// 专辑徽章行（分类 / 付费 / 会员免费）：双栏与单列共用
+  Widget _buildBadges(AlbumInfo album) {
+    final theme = Theme.of(context);
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        if (album.categoryName.isNotEmpty)
+          MiniBadge(album.categoryName, color: theme.colorScheme.secondary),
+        if (album.isPaid) const MiniBadge('付费专辑'),
+        if (album.isVipFree)
+          MiniBadge('会员免费', color: theme.colorScheme.tertiary),
+      ],
+    );
+  }
+
+  /// 「全部播放 / 收藏」按钮行：双栏与单列共用
+  Widget _buildPlayFavRow(AlbumInfo album, bool isFav) {
+    return Row(
+      children: [
+        Expanded(
+          child: FilledButton.icon(
+            onPressed: _tracks.isEmpty ? null : () => _playAt(0),
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('全部播放'),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: FilledButton.tonalIcon(
+            onPressed: () =>
+                context.read<LibraryService>().toggleFavorite(album),
+            icon: Icon(isFav ? Icons.favorite : Icons.favorite_border),
+            label: Text(isFav ? '已收藏' : '收藏'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 宽屏左栏头信息：大封面 + 标题 / 主播 / 统计 + 按钮 + 简介（纵向排布）
+  Widget _buildHeaderWide(AlbumInfo album) {
+    final theme = Theme.of(context);
+    final isFav = context.watch<LibraryService>().isFavorite(album.albumId);
+    final total = _totalCount > 0 ? _totalCount : _tracks.length;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CoverImage(url: album.cover, size: 320, radius: 16),
+        const SizedBox(height: 16),
+        Text(
+          album.title,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+            height: 1.3,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          album.nickname,
+          style: TextStyle(
+            fontSize: 13,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          '共 $total 集${album.playTimes > 0 ? ' · ${formatPlayCount(album.playTimes)}次播放' : ''}',
+          style: TextStyle(
+            fontSize: 12.5,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 8),
+        _buildBadges(album),
+        const SizedBox(height: 14),
+        _buildPlayFavRow(album, isFav),
+        if (album.intro.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Text(
+            album.intro,
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.5,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
     );
   }
 

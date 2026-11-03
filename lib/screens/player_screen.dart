@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/responsive.dart';
 import '../core/utils.dart';
 import '../models/models.dart';
 import '../services/library_service.dart';
@@ -67,62 +68,117 @@ class PlayerScreen extends StatelessWidget {
       ),
       body: track == null
           ? const Center(child: Text('暂无播放内容'))
+          : isExpanded(context)
+          ? _buildWideBody(context, player, track)
           : Padding(
               padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
               child: Column(
                 children: [
                   const SizedBox(height: 12),
-                  CoverImage(url: track.cover, size: 260, radius: 24),
-                  const SizedBox(height: 24),
-                  Text(
-                    track.title,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      height: 1.3,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    track.nickname,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  if (player.sleepAt != null) ...[
-                    const SizedBox(height: 8),
-                    Chip(
-                      avatar: const Icon(Icons.timer, size: 16),
-                      label: Text(
-                        '定时关闭：${player.sleepAt!.difference(DateTime.now()).inMinutes + 1} 分钟内',
-                      ),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ],
+                  _buildMeta(context, player, track, coverSize: 260),
                   const Spacer(),
-                  if (player.isSample) _buildSampleBanner(context, player),
-                  if (player.errorMessage != null) ...[
-                    Text(
-                      player.errorMessage!,
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.error,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                  _buildProgress(context, player),
-                  const SizedBox(height: 4),
-                  _buildControls(context, player),
-                  const SizedBox(height: 8),
-                  _buildExtraRow(context, player),
-                  const SizedBox(height: 8),
-                  _buildQualityRow(context, player),
+                  _buildControlPanel(context, player),
                 ],
               ),
             ),
+    );
+  }
+
+  /// 封面 + 标题 + 主播（+ 定时 chip）：单列与双栏共用
+  Widget _buildMeta(
+    BuildContext context,
+    PlayerService player,
+    Track track, {
+    required double coverSize,
+  }) {
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CoverImage(url: track.cover, size: coverSize, radius: 24),
+        const SizedBox(height: 24),
+        Text(
+          track.title,
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+            height: 1.3,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          track.nickname,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        if (player.sleepAt != null) ...[
+          const SizedBox(height: 8),
+          Chip(
+            avatar: const Icon(Icons.timer, size: 16),
+            label: Text(
+              '定时关闭：${player.sleepAt!.difference(DateTime.now()).inMinutes + 1} 分钟内',
+            ),
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// 试听横幅 / 报错 / 进度 / 控制 / 倍速 / 音质：单列与双栏共用
+  Widget _buildControlPanel(BuildContext context, PlayerService player) {
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (player.isSample) _buildSampleBanner(context, player),
+        if (player.errorMessage != null) ...[
+          Text(
+            player.errorMessage!,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.error,
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+        _buildProgress(context, player),
+        const SizedBox(height: 4),
+        _buildControls(context, player),
+        const SizedBox(height: 8),
+        _buildExtraRow(context, player),
+        const SizedBox(height: 8),
+        _buildQualityRow(context, player),
+      ],
+    );
+  }
+
+  /// 宽屏（≥900）双栏：左封面信息，右控制区；整体限宽 1200 居中
+  Widget _buildWideBody(
+    BuildContext context,
+    PlayerService player,
+    Track track,
+  ) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1200),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(32, 16, 32, 24),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: _buildMeta(context, player, track, coverSize: 340),
+              ),
+              const SizedBox(width: 48),
+              Expanded(child: _buildControlPanel(context, player)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

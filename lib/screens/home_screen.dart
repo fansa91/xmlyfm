@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/responsive.dart';
 import '../models/models.dart';
 import '../services/ximalaya_service.dart';
 import '../widgets/album_card.dart';
@@ -150,34 +151,55 @@ class _HomeScreenState extends State<HomeScreen> {
         Expanded(
           child: RefreshIndicator(
             onRefresh: _loadInitial,
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              itemCount: _feed.length + (_hasMore ? 1 : 0),
-              itemBuilder: (context, i) {
-                if (i >= _feed.length) {
-                  return const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                final album = _feed[i];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: AlbumCard(
-                    title: album.title,
-                    subtitle: album.subTitle.isNotEmpty
-                        ? album.subTitle
-                        : album.nickname,
-                    cover: album.cover,
-                    onTap: () => _openAlbum(album.albumId),
-                  ),
-                );
-              },
-            ),
+            child: isWide(context) ? _buildFeedGrid() : _buildFeedList(),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildFeedItem(int i) {
+    if (i >= _feed.length) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    final album = _feed[i];
+    return AlbumCard(
+      title: album.title,
+      subtitle: album.subTitle.isNotEmpty ? album.subTitle : album.nickname,
+      cover: album.cover,
+      onTap: () => _openAlbum(album.albumId),
+    );
+  }
+
+  /// 紧凑档：单列列表（原形态）
+  Widget _buildFeedList() {
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      itemCount: _feed.length + (_hasMore ? 1 : 0),
+      itemBuilder: (context, i) => Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: _buildFeedItem(i),
+      ),
+    );
+  }
+
+  /// 中 / 宽屏：专辑卡片网格，列数随可用宽度自动增减（约 2–5 列）
+  Widget _buildFeedGrid() {
+    return GridView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 380,
+        mainAxisExtent: 132,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 10,
+      ),
+      itemCount: _feed.length + (_hasMore ? 1 : 0),
+      itemBuilder: (context, i) => _buildFeedItem(i),
     );
   }
 

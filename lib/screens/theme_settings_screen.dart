@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/responsive.dart';
 import '../services/settings_service.dart';
 import '../widgets/detail_scaffold.dart';
 
@@ -16,7 +17,8 @@ class ThemeSettingsScreen extends StatelessWidget {
         appBar: AppBar(title: const Text('主题设置')),
         body: ListenableBuilder(
           listenable: settings,
-          builder: (context, _) => ListView(
+          builder: (context, _) => ConstrainedCenter(
+            child: ListView(
             padding: const EdgeInsets.symmetric(vertical: 8),
             children: [
               _SectionTitle('主题模式'),
@@ -93,6 +95,7 @@ class ThemeSettingsScreen extends StatelessWidget {
                 ),
               ),
             ],
+            ),
           ),
         ),
       ),

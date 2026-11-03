@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
+import '../core/responsive.dart';
 import '../models/models.dart';
 import '../services/download_service.dart';
 import '../services/settings_service.dart';
@@ -21,7 +22,8 @@ class SettingsScreen extends StatelessWidget {
     return DetailScaffold(
       child: Scaffold(
         appBar: AppBar(title: const Text('设置')),
-        body: ListView(
+        body: ConstrainedCenter(
+          child: ListView(
           children: [
             ListTile(
               title: Text('播放',
@@ -167,6 +169,7 @@ class SettingsScreen extends StatelessWidget {
               ),
             ),
           ],
+          ),
         ),
       ),
     );

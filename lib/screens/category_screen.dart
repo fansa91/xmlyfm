@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/responsive.dart';
 import '../models/models.dart';
 import '../services/ximalaya_service.dart';
 import '../widgets/album_card.dart';
@@ -210,16 +211,39 @@ class _CategoryScreenState extends State<CategoryScreen> {
           ),
           const SizedBox(height: 12),
         ],
-        for (final album in data.albums)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: AlbumCard(
-              title: album.title,
-              subtitle: album.nickname,
-              cover: album.cover,
-              onTap: () => _openAlbum(album.albumId),
+        if (isWide(context) && data.albums.isNotEmpty)
+          // 中 / 宽屏：专辑卡片转网格（嵌在同一滚动区内，不单独滚动）
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 380,
+              mainAxisExtent: 132,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 10,
             ),
-          ),
+            itemCount: data.albums.length,
+            itemBuilder: (context, i) {
+              final album = data.albums[i];
+              return AlbumCard(
+                title: album.title,
+                subtitle: album.nickname,
+                cover: album.cover,
+                onTap: () => _openAlbum(album.albumId),
+              );
+            },
+          )
+        else
+          for (final album in data.albums)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: AlbumCard(
+                title: album.title,
+                subtitle: album.nickname,
+                cover: album.cover,
+                onTap: () => _openAlbum(album.albumId),
+              ),
+            ),
       ],
     );
   }

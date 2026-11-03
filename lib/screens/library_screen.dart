@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/responsive.dart';
 import '../core/utils.dart';
 import '../models/models.dart';
 import '../services/download_service.dart';
@@ -27,7 +28,8 @@ class LibraryScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: ListView(
+      body: ConstrainedCenter(
+        child: ListView(
         children: [
           Builder(
             builder: (context) {
@@ -171,6 +173,7 @@ class LibraryScreen extends StatelessWidget {
               ),
           const SizedBox(height: 24),
         ],
+        ),
       ),
     );
   }

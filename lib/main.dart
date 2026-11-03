@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'core/responsive.dart';
 import 'core/theme.dart';
 import 'screens/category_screen.dart';
 import 'screens/home_screen.dart';
@@ -110,7 +111,9 @@ class XmlyFmApp extends StatelessWidget {
   }
 }
 
-/// 主框架：底部导航（首页 / 分类 / 搜索 / 我的）+ 迷你播放器
+/// 主框架：导航（首页 / 分类 / 搜索 / 我的）+ 迷你播放器。
+/// 紧凑档（<600）底部 NavigationBar；中 / 宽屏档左侧 NavigationRail，
+/// 迷你播放条横贯窗口底部通栏。
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
 
@@ -128,8 +131,71 @@ class _AppShellState extends State<AppShell> {
     LibraryScreen(),
   ];
 
+  static const _railDestinations = [
+    (icon: Icons.home_outlined, selectedIcon: Icons.home, label: '首页'),
+    (
+      icon: Icons.category_outlined,
+      selectedIcon: Icons.category,
+      label: '分类',
+    ),
+    (icon: Icons.search, selectedIcon: Icons.search, label: '搜索'),
+    (
+      icon: Icons.person_outline,
+      selectedIcon: Icons.person,
+      label: '我的',
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) {
+    if (isWide(context)) {
+      // 中 / 宽屏：左侧 NavigationRail + 右侧内容，迷你播放条底部通栏
+      return Scaffold(
+        body: Column(
+          children: [
+            Expanded(
+              child: Row(
+                children: [
+                  NavigationRail(
+                    leading: Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.asset(
+                          'assets/icon.png',
+                          width: 40,
+                          height: 40,
+                        ),
+                      ),
+                    ),
+                    selectedIndex: _currentIndex,
+                    onDestinationSelected: (i) =>
+                        setState(() => _currentIndex = i),
+                    labelType: NavigationRailLabelType.all,
+                    destinations: [
+                      for (final d in _railDestinations)
+                        NavigationRailDestination(
+                          icon: Icon(d.icon),
+                          selectedIcon: Icon(d.selectedIcon),
+                          label: Text(d.label),
+                        ),
+                    ],
+                  ),
+                  const VerticalDivider(thickness: 1, width: 1),
+                  Expanded(
+                    child: IndexedStack(
+                      index: _currentIndex,
+                      children: _pages,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const MiniPlayer(),
+          ],
+        ),
+      );
+    }
     return Scaffold(
       body: Column(
         children: [

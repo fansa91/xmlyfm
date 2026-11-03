@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/responsive.dart';
 import '../core/utils.dart';
 import '../services/download_service.dart';
 import '../services/player_service.dart';
@@ -47,7 +48,8 @@ class DownloadsScreen extends StatelessWidget {
               ),
           ],
         ),
-        body: downloads.tasks.isEmpty
+        body: ConstrainedCenter(
+          child: downloads.tasks.isEmpty
             ? const Center(child: Text('暂无下载，在专辑页点下载图标即可添加'))
             : ListView(
                 children: [
@@ -72,6 +74,7 @@ class DownloadsScreen extends StatelessWidget {
                   const SizedBox(height: 24),
                 ],
               ),
+        ),
       ),
     );
   }

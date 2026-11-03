@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/responsive.dart';
 import '../core/utils.dart';
 import '../models/models.dart';
 import '../services/player_service.dart';
@@ -143,6 +144,18 @@ class _SearchResultsScreenState extends State<SearchResultsScreen>
             textAlign: TextAlign.center,
           ),
         ),
+      );
+    }
+    if (isWide(context)) {
+      // 中 / 宽屏：结果行转多列（行宽约 560，宽屏下双列）
+      return GridView.builder(
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 560,
+          mainAxisExtent: 76,
+          crossAxisSpacing: 8,
+        ),
+        itemCount: state.docs.length,
+        itemBuilder: (context, i) => _DocTile(doc: state.docs[i]),
       );
     }
     return ListView.builder(
