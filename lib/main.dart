@@ -1,0 +1,141 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import 'core/theme.dart';
+import 'screens/category_screen.dart';
+import 'screens/home_screen.dart';
+import 'screens/library_screen.dart';
+import 'screens/player_screen.dart';
+import 'screens/search_screen.dart';
+import 'screens/settings_screen.dart';
+import 'services/library_service.dart';
+import 'services/play_resolver.dart';
+import 'services/player_service.dart';
+import 'services/settings_service.dart';
+import 'services/ximalaya_service.dart';
+import 'widgets/mini_player.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final settings = SettingsService();
+  await settings.init();
+  final library = LibraryService();
+  await library.init();
+  runApp(XmlyFmApp(settings: settings, library: library));
+}
+
+class XmlyFmApp extends StatelessWidget {
+  final SettingsService settings;
+  final LibraryService library;
+
+  const XmlyFmApp({super.key, required this.settings, required this.library});
+
+  @override
+  Widget build(BuildContext context) {
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: settings),
+        ChangeNotifierProvider.value(value: library),
+        Provider(create: (_) => XimalayaService()),
+        ProxyProvider<XimalayaService, PlayResolver>(
+          update: (_, service, _) => PlayResolver(service),
+        ),
+        ChangeNotifierProxyProvider3<PlayResolver, SettingsService,
+            LibraryService, PlayerService>(
+          create: (ctx) => PlayerService(
+            ctx.read<PlayResolver>(),
+            ctx.read<SettingsService>(),
+            ctx.read<LibraryService>(),
+          ),
+          update: (_, resolver, st, lib, player) {
+            // 同步 baseInfo v4 开关到解析器
+            resolver.useBaseInfoV4 = st.baseInfoV4;
+            return player ?? PlayerService(resolver, st, lib);
+          },
+        ),
+      ],
+      child: ListenableBuilder(
+        listenable: settings,
+        builder: (context, _) {
+          return MaterialApp(
+            title: 'xmlyfm',
+            debugShowCheckedModeBanner: false,
+            theme: buildTheme(
+              brightness: Brightness.light,
+              seedColor: settings.effectiveSeedColor,
+            ),
+            darkTheme: buildTheme(
+              brightness: Brightness.dark,
+              seedColor: settings.effectiveSeedColor,
+              pureBlack: settings.pureBlack,
+            ),
+            themeMode: settings.themeMode,
+            home: const AppShell(),
+            routes: {
+              '/player': (_) => const PlayerScreen(),
+              '/settings': (_) => const SettingsScreen(),
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// 主框架：底部导航（首页 / 分类 / 搜索 / 我的）+ 迷你播放器
+class AppShell extends StatefulWidget {
+  const AppShell({super.key});
+
+  @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<AppShell> {
+  int _currentIndex = 0;
+
+  final _pages = const [
+    HomeScreen(),
+    CategoryScreen(),
+    SearchScreen(),
+    LibraryScreen(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Column(
+        children: [
+          Expanded(
+            child: IndexedStack(index: _currentIndex, children: _pages),
+          ),
+          const MiniPlayer(),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (i) => setState(() => _currentIndex = i),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: '首页',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.category_outlined),
+            selectedIcon: Icon(Icons.category),
+            label: '分类',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.search),
+            label: '搜索',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: '我的',
+          ),
+        ],
+      ),
+    );
+  }
+}
