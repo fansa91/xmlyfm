@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15,6 +17,7 @@ class SettingsService extends ChangeNotifier {
   static const _keyDefaultQuality = 'default_quality';
   static const _keyBaseInfoV4 = 'baseinfo_v4';
   static const _keyDownloadFileNameFormat = 'download_filename_format';
+  static const _keyDownloadDirectory = 'download_directory';
 
   /// 预设主题色
   static const List<ThemePreset> themePresets = [
@@ -81,6 +84,26 @@ class SettingsService extends ChangeNotifier {
   String _downloadFileNameFormat = DownloadFileNameFormatter.defaultFormat;
   String get downloadFileNameFormat => _downloadFileNameFormat;
 
+  /// 自定义下载目录（空 = 用默认的应用文档目录 downloads/）。
+  /// 只影响之后的新下载，不搬移已下载文件；iOS 不开放此设置（见下）。
+  String _downloadDirectory = '';
+  String get downloadDirectory => _downloadDirectory;
+
+  /// 是否 iOS 平台（默认取 dart:io 的 Platform.isIOS，Web 等取不到
+  /// 平台信息时按非 iOS 处理；测试可覆盖）。
+  @visibleForTesting
+  bool Function() isIOS = () {
+    try {
+      return Platform.isIOS;
+    } catch (_) {
+      return false;
+    }
+  };
+
+  /// 「默认下载路径」设置项是否显示：iOS 固定使用应用沙盒目录，
+  /// 不提供自定义下载路径，故隐藏。
+  bool get showDownloadDirectorySetting => !isIOS();
+
   SettingsService();
 
   Future<void> init() async {
@@ -98,6 +121,7 @@ class SettingsService extends ChangeNotifier {
     _downloadFileNameFormat =
         _prefs.getString(_keyDownloadFileNameFormat) ??
         DownloadFileNameFormatter.defaultFormat;
+    _downloadDirectory = _prefs.getString(_keyDownloadDirectory) ?? '';
   }
 
   /// 通过系统 CorePalette 取种子色，M3 明暗主题分别用 fromSeed 生成
@@ -155,6 +179,15 @@ class SettingsService extends ChangeNotifier {
     if (value == _defaultQuality) return;
     _defaultQuality = value;
     await _prefs.setInt(_keyDefaultQuality, value);
+    notifyListeners();
+  }
+
+  /// 设置自定义下载目录（空字符串 = 恢复默认）。
+  Future<void> setDownloadDirectory(String value) async {
+    value = value.trim();
+    if (value == _downloadDirectory) return;
+    _downloadDirectory = value;
+    await _prefs.setString(_keyDownloadDirectory, value);
     notifyListeners();
   }
 

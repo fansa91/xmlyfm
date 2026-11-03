@@ -3,8 +3,10 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 import '../models/models.dart';
+import '../services/download_service.dart';
 import '../services/settings_service.dart';
 import '../widgets/detail_scaffold.dart';
+import 'download_directory_dialog.dart';
 import 'download_format_dialog.dart';
 import 'theme_settings_screen.dart';
 
@@ -15,6 +17,7 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsService>();
+    final downloads = context.watch<DownloadService>();
     return DetailScaffold(
       child: Scaffold(
         appBar: AppBar(title: const Text('设置')),
@@ -89,6 +92,30 @@ class SettingsScreen extends StatelessWidget {
                 }
               },
             ),
+            // iOS 固定使用应用沙盒目录，不开放自定义下载路径
+            if (settings.showDownloadDirectorySetting)
+              ListTile(
+                leading: const Icon(Icons.folder_outlined),
+                title: const Text('默认下载路径'),
+                subtitle: Text(
+                  settings.downloadDirectory.isNotEmpty
+                      ? settings.downloadDirectory
+                      : '默认${downloads.defaultDirPath == null ? '' : '：${downloads.defaultDirPath}'}',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  final result = await showDialog<String>(
+                    context: context,
+                    builder: (_) => DownloadDirectoryDialog(
+                      current: settings.downloadDirectory,
+                      defaultPath: downloads.defaultDirPath ?? '',
+                    ),
+                  );
+                  if (result != null) {
+                    await settings.setDownloadDirectory(result);
+                  }
+                },
+              ),
             const Divider(),
             ListTile(
               title: Text('外观',

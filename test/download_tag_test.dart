@@ -216,8 +216,6 @@ void main() {
       final settings = SettingsService();
       await settings.init();
       svc = DownloadService(FakeResolver((_) => const PlayResult()), settings);
-      // 写标签是 iOS 逻辑：测试宿主非 iOS，显式打开门控走写标签路径
-      svc.isIOS = () => true;
       dir = await Directory.systemTemp.createTemp('svc_tag');
       await svc.initForTest(dir);
     });
@@ -329,18 +327,21 @@ void main() {
       expect(frames.containsKey('APIC'), isFalse);
     });
 
-    test('平台门控：非 iOS 时 mp3 也不写标签，文件不动', () async {
-      svc.isIOS = () => false;
+    test('全平台写标签：非 iOS 平台同样给 mp3 写标签', () async {
+      svc.isIOS = () => false; // 写标签已与平台无关，isIOS 仅剩目录判读用途
       final audio = fakeAudio();
       final path = '${dir.path}/e.mp3';
       await File(path).writeAsBytes(audio);
       final task = completedTask('e.mp3', path);
       await svc.applyTagsForTest(task);
-      expect(task.tagged, isFalse);
-      expect(await File(path).readAsBytes(), audio);
+      expect(task.tagged, isTrue);
+      final out = await File(path).readAsBytes();
+      expect(out.length, greaterThan(audio.length));
+      final frames = AudioTagWriter.parseFrames(out);
+      expect(decodeTextFrame(frames['TIT2']!.single), '标题乙');
     });
 
-    test('平台门控：默认判定取 Platform.isIOS', () {
+    test('isIOS 默认判定取 Platform.isIOS（下载目录判读用）', () {
       final fresh = DownloadService(
         FakeResolver((_) => const PlayResult()),
         svc.settings,

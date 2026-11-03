@@ -35,10 +35,12 @@ class DownloadTask {
   /// （保住列表直带 URL 与付费标记，不因只存展示字段而丢）
   final String trackJson;
 
-  /// 最终文件名（含扩展名），位于 downloads 目录下
+  /// 最终文件名（含扩展名），位于下载目录下
   String fileName;
 
-  /// 完整路径（init 时按当前文档目录重建，兼容文档目录迁移）
+  /// 完整路径，随任务记录持久化为绝对路径：改下载目录后，已完成记录
+  /// 仍指向原文件（播放/删除不受影响）。旧版本记录无此字段，init 时
+  /// 按默认目录（历史文件都在那里）重建。
   String filePath;
 
   /// 总字节数（0 = 未知）；已完成时为文件实际大小
@@ -48,8 +50,8 @@ class DownloadTask {
   String? errorMessage;
 
   /// 是否已把标签（标题/专辑/主播/序号/封面）写进文件本体。
-  /// 写标签仅 iOS 平台执行，且仅 MP3 写 ID3v2；其他平台、以及 m4a 等
-  /// 容器（跳过本体标签，元信息在任务记录里）恒为 false。
+  /// 全平台下载完成后都写；仅 MP3 写 ID3v2，m4a 等容器跳过本体标签
+  /// （元信息在任务记录里）恒为 false；写失败也为 false。
   bool tagged;
   final int createdAt;
 
@@ -115,6 +117,7 @@ class DownloadTask {
     'albumTotal': albumTotal,
     'trackJson': trackJson,
     'fileName': fileName,
+    'filePath': filePath,
     'fileSize': fileSize,
     'downloadedBytes': downloadedBytes,
     'status': status.name,
@@ -142,7 +145,7 @@ class DownloadTask {
       albumTotal: json['albumTotal'] as int? ?? 0,
       trackJson: json['trackJson'] as String? ?? '',
       fileName: json['fileName'] as String? ?? '',
-      filePath: '',
+      filePath: json['filePath'] as String? ?? '',
       fileSize: json['fileSize'] as int? ?? 0,
       downloadedBytes: json['downloadedBytes'] as int? ?? 0,
       status: status,
@@ -153,8 +156,9 @@ class DownloadTask {
   }
 }
 
-/// 下载管理：经 PlayResolver 解析直链后用 dio 流式下载到
-/// 应用文档目录 downloads/；任务列表以 SharedPreferences JSON 持久化。
+/// 下载管理：经 PlayResolver 解析直链后用 dio 流式下载到生效下载目录
+/// （设置里的自定义目录优先，iOS 除外；缺省为应用文档目录 downloads/）；
+/// 任务列表以 SharedPreferences JSON 持久化。
 ///
 /// - 并发上限 2，其余排队；暂停/取消/重试均为单任务级，另有全部暂停/继续。
 /// - 不做断点续传：暂停即删半截文件，继续时重新解析地址整文件重下。
@@ -167,14 +171,24 @@ class DownloadService extends ChangeNotifier {
   final SettingsService settings;
   final Dio _dio;
 
-  /// 是否 iOS 平台（下载写标签的门控判定用；默认取 dart:io 的
-  /// Platform.isIOS，测试可覆盖）。标签写入仅 iOS 执行，其他平台
-  /// 下载只落盘原始文件。
+  /// 是否 iOS 平台（自定义下载目录的判读用：iOS 恒用沙盒默认目录、
+  /// 忽略自定义值；默认取 dart:io 的 Platform.isIOS，Web 等取不到
+  /// 平台信息时按非 iOS 处理；测试可覆盖）。
   @visibleForTesting
-  bool Function() isIOS = () => Platform.isIOS;
+  bool Function() isIOS = () {
+    try {
+      return Platform.isIOS;
+    } catch (_) {
+      return false;
+    }
+  };
 
   late SharedPreferences _prefs;
   Directory? _dir;
+
+  /// 默认下载目录（应用文档目录 downloads/），自定义目录回落目标，
+  /// 也是旧版本任务记录重建路径的基准。
+  Directory? _defaultDir;
   final List<DownloadTask> _tasks = [];
   final Map<int, CancelToken> _tokens = {};
   final Set<int> _pauseRequested = {};
@@ -189,6 +203,12 @@ class DownloadService extends ChangeNotifier {
               headers: const {'User-Agent': XimalayaService.userAgent},
             ),
           );
+
+  /// 当前生效的下载目录路径（未初始化/不可用时为 null）
+  String? get downloadDirPath => _dir?.path;
+
+  /// 默认下载目录路径（应用文档目录 downloads/）
+  String? get defaultDirPath => _defaultDir?.path;
 
   List<DownloadTask> get tasks => List.unmodifiable(_tasks);
   List<DownloadTask> get completedTasks =>
@@ -216,12 +236,46 @@ class DownloadService extends ChangeNotifier {
     return File(t.filePath).existsSync() ? t.filePath : null;
   }
 
+  /// 准备目录：不存在则递归创建，并做可写性探针（写临时文件再删）。
+  /// 目录就绪且可写返回 true。
+  static Future<bool> prepareDirectory(Directory dir) async {
+    try {
+      if (!await dir.exists()) await dir.create(recursive: true);
+      final probe = File('${dir.path}/.xmlyfm_probe');
+      await probe.writeAsString('ok', flush: true);
+      await probe.delete();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 生效下载目录解析：非 iOS 且自定义路径非空时优先用自定义目录，
+  /// 其准备失败（建不出/不可写）则回落默认目录；iOS 恒用默认目录。
+  static Future<Directory> resolveDownloadDirectory({
+    required String customPath,
+    required Directory defaultDir,
+    required bool ios,
+  }) async {
+    final custom = customPath.trim();
+    if (!ios && custom.isNotEmpty) {
+      final dir = Directory(custom);
+      if (await prepareDirectory(dir)) return dir;
+    }
+    await prepareDirectory(defaultDir);
+    return defaultDir;
+  }
+
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
     try {
       final docs = await getApplicationDocumentsDirectory();
-      _dir = Directory('${docs.path}/downloads');
-      if (!await _dir!.exists()) await _dir!.create(recursive: true);
+      _defaultDir = Directory('${docs.path}/downloads');
+      _dir = await resolveDownloadDirectory(
+        customPath: settings.downloadDirectory,
+        defaultDir: _defaultDir!,
+        ios: isIOS(),
+      );
     } catch (_) {
       // 文档目录不可用（如 Web）：下载功能整体降级，enqueue 会提示未就绪
       _dir = null;
@@ -231,10 +285,12 @@ class DownloadService extends ChangeNotifier {
     await _save();
   }
 
-  /// 测试用：跳过 path_provider，直接指定下载目录完成初始化。
+  /// 测试用：跳过 path_provider，直接指定下载目录完成初始化
+  /// （同时充当默认目录）。
   @visibleForTesting
   Future<void> initForTest(Directory dir) async {
     _prefs = await SharedPreferences.getInstance();
+    _defaultDir = dir;
     _dir = dir;
     if (!await dir.exists()) await dir.create(recursive: true);
     await _loadTasks();
@@ -249,7 +305,13 @@ class DownloadService extends ChangeNotifier {
           for (final e in decoded.whereType<Map>()) {
             final task = DownloadTask.fromJson(Map<String, dynamic>.from(e));
             if (task.trackId <= 0 || task.fileName.isEmpty) continue;
-            task.filePath = '${_dir!.path}/${task.fileName}';
+            if (task.filePath.isEmpty) {
+              // 旧版本记录没有持久化路径：历史下载都在默认目录下，
+              // 按默认目录重建（不能用当前生效目录，否则换过目录后
+              // 已完成记录会全部对不上文件被丢弃）
+              task.filePath =
+                  '${(_defaultDir ?? _dir)!.path}/${task.fileName}';
+            }
             if (task.status == DownloadStatus.completed) {
               // 已完成记录必须文件还在，否则丢弃记录
               final f = File(task.filePath);
@@ -595,17 +657,12 @@ class DownloadService extends ChangeNotifier {
   /// TXXX 自定义项（声音/专辑 ID、播放量、来源、付费标记）——字段拿不到
   /// 的不写，不编造。
   ///
-  /// - **仅 iOS 平台执行**（平台门控）：Android/桌面/Web 等平台的下载
-  ///   保持原始文件不写本体标签，tagged 记 false。
+  /// - **全平台执行**：下载完成即写，与平台无关。
   /// - 仅 MP3 写 ID3v2（[AudioTagWriter]）；m4a/mp4 容器手写改 ilst 风险高，
   ///   跳过本体标签——元信息仍完整保存在任务记录里，tagged 保持 false。
   /// - 封面图拉取失败则写无图标签，不阻塞；写标签失败保留原文件，
   ///   任务照样算完成。成功后按新文件大小回填 fileSize。
   Future<void> _tagCompletedFile(DownloadTask task) async {
-    if (!isIOS()) {
-      task.tagged = false;
-      return;
-    }
     if (!AudioTagWriter.supportsTagging(task.fileName)) {
       task.tagged = false;
       return;
