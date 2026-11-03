@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../core/utils.dart';
 import '../models/models.dart';
+import '../services/library_service.dart';
 import '../services/player_service.dart';
 
 /// 小徽章（付费 / 试听 / 会员免费等）
@@ -64,14 +65,26 @@ class TrackTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final player = context.watch<PlayerService>();
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final isCurrent = player.current?.trackId == track.trackId;
     final isPlayingThis = isCurrent && player.playing;
+    // 正在播放的集：额外显示本地续播进度条（play_progress 持久化，
+    // 无记录就不显示）
+    final progress = isCurrent
+        ? context.watch<LibraryService>().savedProgressFraction(
+              track.trackId,
+              fallbackDurationSec: track.duration,
+            )
+        : null;
 
     return ListTile(
       onTap: onTap,
       onLongPress: onLongPress,
       selected: selected,
-      selectedTileColor: theme.colorScheme.secondaryContainer,
+      selectedTileColor: scheme.secondaryContainer,
+      tileColor: isCurrent
+          ? scheme.primaryContainer.withValues(alpha: 0.45)
+          : null,
       leading:
           leading ??
           SizedBox(
@@ -102,43 +115,64 @@ class TrackTile extends StatelessWidget {
       ),
       subtitle: Padding(
         padding: const EdgeInsets.only(top: 4),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(
-              Icons.play_circle_outline,
-              size: 13,
-              color: theme.colorScheme.onSurfaceVariant,
+            Row(
+              children: [
+                Icon(
+                  Icons.play_circle_outline,
+                  size: 13,
+                  color: scheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 3),
+                Flexible(
+                  child: Text(
+                    formatPlayCount(track.playtimes),
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Icon(
+                  Icons.schedule,
+                  size: 13,
+                  color: scheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 3),
+                Text(
+                  formatSeconds(track.duration),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+                if (track.createdAt > 0) ...[
+                  const SizedBox(width: 10),
+                  Text(
+                    formatDate(track.createdAt),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+                const SizedBox(width: 8),
+                if (track.isChargeTrack) ...[
+                  const MiniBadge('付费'),
+                  const SizedBox(width: 6),
+                ],
+                if (track.isChargeTrack && track.sampleDuration > 0)
+                  MiniBadge(
+                    '试听 ${track.sampleDuration} 秒',
+                    color: scheme.tertiary,
+                  ),
+              ],
             ),
-            const SizedBox(width: 3),
-            Text(
-              formatPlayCount(track.playtimes),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Icon(
-              Icons.schedule,
-              size: 13,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(width: 3),
-            Text(
-              formatSeconds(track.duration),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(width: 8),
-            if (track.isChargeTrack) ...[
-              const MiniBadge('付费'),
-              const SizedBox(width: 6),
+            if (progress != null) ...[
+              const SizedBox(height: 6),
+              LinearProgressIndicator(value: progress),
             ],
-            if (track.isChargeTrack && track.sampleDuration > 0)
-              MiniBadge(
-                '试听 ${track.sampleDuration} 秒',
-                color: theme.colorScheme.tertiary,
-              ),
           ],
         ),
       ),

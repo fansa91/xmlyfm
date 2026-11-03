@@ -161,6 +161,94 @@ class CategoryAlbum {
   }
 }
 
+/// 分类筛选元数据组（discovery/v2/category/metadatas 的 metadatas 一项，
+/// 文档 §2.8 实测）：一组可筛选维度，如「小说分类」「是否完本」。
+class CategoryMetaGroup {
+  final int id;
+  final String displayName;
+  final List<CategoryMetaValue> values;
+
+  const CategoryMetaGroup({
+    required this.id,
+    required this.displayName,
+    required this.values,
+  });
+
+  factory CategoryMetaGroup.fromJson(Map<String, dynamic> json) {
+    return CategoryMetaGroup(
+      id: intOf(json['id']),
+      displayName: strOf(json['displayName']),
+      values: _listOf(json['metadataValues'])
+          .map((e) => CategoryMetaValue.fromJson(_mapOf(e)))
+          .where((v) => v.id > 0 && v.displayName.isNotEmpty)
+          .toList(),
+    );
+  }
+
+  static List<CategoryMetaGroup> parseList(Map<String, dynamic> json) {
+    return _listOf(json['metadatas'])
+        .map((e) => CategoryMetaGroup.fromJson(_mapOf(e)))
+        .where((g) => g.id > 0 && g.values.isNotEmpty)
+        .toList();
+  }
+}
+
+/// 元数据组里的一个可选值；选中后可能带出下级子组（values 的 metadatas），
+/// 如「男频」带出题材/情节/角色等子组。
+class CategoryMetaValue {
+  final int id;
+  final String displayName;
+  final List<CategoryMetaGroup> subGroups;
+
+  const CategoryMetaValue({
+    required this.id,
+    required this.displayName,
+    required this.subGroups,
+  });
+
+  factory CategoryMetaValue.fromJson(Map<String, dynamic> json) {
+    return CategoryMetaValue(
+      id: intOf(json['id']),
+      displayName: strOf(json['displayName']),
+      subGroups: _listOf(json['metadatas'])
+          .map((e) => CategoryMetaGroup.fromJson(_mapOf(e)))
+          .where((g) => g.id > 0 && g.values.isNotEmpty)
+          .toList(),
+    );
+  }
+}
+
+/// 元数据筛选专辑列表一页（discovery/v2/category/metadata/albums，
+/// 文档 §2.8）：服务端固定每页 20 条，翻页参数是 pageId。
+class MetaAlbumsPage {
+  final List<CategoryAlbum> albums;
+  final int pageId;
+  final int maxPageId;
+
+  const MetaAlbumsPage({
+    required this.albums,
+    required this.pageId,
+    required this.maxPageId,
+  });
+
+  bool get hasMore => pageId < maxPageId;
+
+  factory MetaAlbumsPage.fromJson(
+    Map<String, dynamic> json, {
+    required int pageId,
+  }) {
+    final albums = _listOf(json['list'])
+        .map((e) => CategoryAlbum.fromJson(_mapOf(e)))
+        .where((a) => a.albumId > 0 && a.title.isNotEmpty)
+        .toList();
+    return MetaAlbumsPage(
+      albums: albums,
+      pageId: pageId,
+      maxPageId: intOf(json['maxPageId']),
+    );
+  }
+}
+
 /// 分类页数据：从 heterogenous cards 里提取专辑卡与标签词
 class CategoryPageData {
   final List<CategoryAlbum> albums;
@@ -514,6 +602,10 @@ class AlbumInfo {
   final String nickname;
   final String cover;
   final String intro;
+
+  /// 完整简介（introRich 剥 HTML 所得；纯文本 intro/shortIntro 都是
+  /// 带「...」的截断版）。缺 introRich 时回落 intro/shortIntro。
+  final String fullIntro;
   final int uid;
   final bool isPaid;
   final bool isVipFree;
@@ -527,6 +619,7 @@ class AlbumInfo {
     required this.nickname,
     required this.cover,
     required this.intro,
+    this.fullIntro = '',
     required this.uid,
     required this.isPaid,
     required this.isVipFree,
@@ -538,12 +631,16 @@ class AlbumInfo {
   factory AlbumInfo.fromJson(Map<String, dynamic> json) {
     var intro = strOf(json['shortIntro']);
     if (intro.isEmpty) intro = strOf(json['intro']);
+    var fullIntro = htmlToPlainText(strOf(json['introRich']));
+    if (fullIntro.isEmpty) fullIntro = strOf(json['intro']);
+    if (fullIntro.isEmpty) fullIntro = intro;
     return AlbumInfo(
       albumId: intOf(json['albumId']),
       title: strOf(json['title']),
       nickname: strOf(json['nickname']),
       cover: strOf(json['coverLarge']),
       intro: intro,
+      fullIntro: fullIntro,
       uid: intOf(json['uid']),
       isPaid: boolOf(json['isPaid']),
       isVipFree: boolOf(json['isVipFree']),

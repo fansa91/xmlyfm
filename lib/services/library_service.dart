@@ -223,6 +223,19 @@ class LibraryService extends ChangeNotifier {
     return null;
   }
 
+  /// 某条声音的续播进度占比（0~1），供列表行画进度条；
+  /// 无记录、位置为 0 或总时长未知（记录与 [fallbackDurationSec] 都没有）
+  /// 返回 null。
+  double? savedProgressFraction(int trackId, {int fallbackDurationSec = 0}) {
+    for (final e in _progress) {
+      if (e.trackId != trackId) continue;
+      final total = e.durationSec > 0 ? e.durationSec : fallbackDurationSec;
+      if (e.positionSec <= 0 || total <= 0) return null;
+      return (e.positionSec / total).clamp(0.0, 1.0);
+    }
+    return null;
+  }
+
   /// 保存续播位置。position <= 0 或已到结尾（距总时长不足 5 秒）视为
   /// 无需续播，改为清除记录。不 notifyListeners：进度不在任何界面展示，
   /// 高频落盘时避免无谓重建。

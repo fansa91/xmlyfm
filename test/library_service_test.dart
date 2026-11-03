@@ -140,6 +140,21 @@ void main() {
       expect(lib.savedPosition(8), const Duration(seconds: 99));
     });
 
+    test('savedProgressFraction：占比计算与兜底时长', () async {
+      final lib = await reopenLibrary();
+      expect(lib.savedProgressFraction(99), isNull);
+      await lib.saveProgress(11, const Duration(seconds: 150),
+          total: const Duration(seconds: 600));
+      expect(lib.savedProgressFraction(11), closeTo(0.25, 1e-9));
+      // 记录里没存总时长时用传入的兜底时长
+      await lib.saveProgress(12, const Duration(seconds: 30));
+      expect(lib.savedProgressFraction(12), isNull);
+      expect(
+        lib.savedProgressFraction(12, fallbackDurationSec: 120),
+        closeTo(0.25, 1e-9),
+      );
+    });
+
     test('clearProgress 清除指定声音', () async {
       final lib = await reopenLibrary();
       await lib.saveProgress(6, const Duration(seconds: 30));

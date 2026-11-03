@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xmlyfm/core/utils.dart';
 import 'package:xmlyfm/models/models.dart';
 
 Map<String, dynamic> fixture(String name) {
@@ -10,6 +11,15 @@ Map<String, dynamic> fixture(String name) {
 }
 
 void main() {
+  group('工具', () {
+    test('htmlToPlainText：块级标签转行、剥标签、反转义', () {
+      final text = htmlToPlainText(
+          '<p style="x">第一段&nbsp;文字</p><p>第二段<br>换行 &amp; 符号</p>');
+      expect(text, '第一段 文字\n第二段\n换行 & 符号');
+      expect(htmlToPlainText(''), isEmpty);
+    });
+  });
+
   group('首页', () {
     test('customCategories 页签解析', () {
       final tabs = HomeTab.parseHomeTabs(fixture('home_customCategories.json'));
@@ -40,6 +50,34 @@ void main() {
       final data = CategoryPageData.fromJson(fixture('home_categoryPage.json'));
       expect(data.tags, isNotEmpty);
       expect(data.tags, contains('都市'));
+    });
+
+    test('v2 元数据树解析：组 → 值 → 子组（文档 §2.8 样本）', () {
+      final groups =
+          CategoryMetaGroup.parseList(fixture('category_v2_metadatas.json'));
+      expect(groups.length, 2);
+      final novel = groups.firstWhere((g) => g.displayName == '小说分类');
+      expect(novel.id, 11510);
+      final male = novel.values.single;
+      expect(male.displayName, '男频');
+      expect(male.id, 5162);
+      // 男频带出题材子组，含「玄幻」值
+      final genre = male.subGroups.firstWhere((g) => g.id == 11486);
+      expect(genre.values.map((v) => v.displayName), contains('玄幻'));
+      final finished = groups.firstWhere((g) => g.displayName == '是否完本');
+      expect(finished.values.length, 2);
+    });
+
+    test('v2 筛选专辑列表解析：分页口径 pageId/maxPageId', () {
+      final page = MetaAlbumsPage.fromJson(
+        fixture('category_v2_metadata_albums.json'),
+        pageId: 1,
+      );
+      expect(page.albums.length, 3);
+      expect(page.albums.first.albumId, 81519744);
+      expect(page.albums.first.title, contains('蛊真人'));
+      expect(page.maxPageId, 4279);
+      expect(page.hasMore, isTrue);
     });
   });
 
@@ -106,6 +144,26 @@ void main() {
       }
       expect(page.totalCount, greaterThan(0));
       expect(page.hasMore, isTrue);
+    });
+
+    test('每集发行日期 createdAt 为毫秒时间戳（样本实测）', () {
+      final page =
+          AlbumTracksPage.fromJson(fixture('play_album_tracks_freealbum.json'));
+      final first = page.tracks.first;
+      expect(first.createdAt, 1352451581000);
+      expect(formatDate(first.createdAt), '2012-11-09');
+      expect(formatDate(0), isEmpty);
+    });
+
+    test('完整简介取自 introRich 剥 HTML，纯文本 intro 是截断版', () {
+      final page =
+          AlbumTracksPage.fromJson(fixture('play_album_tracks_freealbum.json'));
+      final album = page.album;
+      // shortIntro 以「...」截断，fullIntro 是全文且不含 HTML 标签
+      expect(album.intro, endsWith('...'));
+      expect(album.fullIntro, isNot(contains('<')));
+      expect(album.fullIntro, endsWith('不朽功勋。'));
+      expect(album.fullIntro.length, greaterThan(album.intro.length));
     });
 
     test('付费专辑免费集：带防盗链 URL 直播', () {

@@ -64,6 +64,27 @@ String formatBytes(int bytes) {
   return '${value.toStringAsFixed(1)} ${units[unit]}';
 }
 
+/// 富文本 HTML 转纯文本：块级标签与 <br> 转行、剥掉其余标签、反转义实体、
+/// 压缩多余空行。用于专辑 introRich（纯文本 intro/shortIntro 是带「...」的
+/// 截断版，全文只在 introRich 里，样本实测）。
+String htmlToPlainText(String html) {
+  if (html.isEmpty) return '';
+  var s = html
+      .replaceAll(RegExp(r'<\s*br\s*/?>', caseSensitive: false), '\n')
+      .replaceAll(RegExp(r'</\s*(p|div|li|h[1-6])\s*>', caseSensitive: false),
+          '\n')
+      .replaceAll(RegExp(r'<[^>]+>'), '');
+  s = s
+      .replaceAll('&nbsp;', ' ')
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>')
+      .replaceAll('&quot;', '"')
+      .replaceAll('&#39;', "'")
+      .replaceAll('&amp;', '&');
+  final lines = s.split('\n').map((l) => l.trim()).toList();
+  return lines.where((l) => l.isNotEmpty).join('\n');
+}
+
 String formatDate(int msEpoch) {
   if (msEpoch <= 0) return '';
   final dt = DateTime.fromMillisecondsSinceEpoch(msEpoch);
