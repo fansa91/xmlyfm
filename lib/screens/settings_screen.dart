@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 import '../models/models.dart';
@@ -115,12 +116,27 @@ class SettingsScreen extends StatelessWidget {
                       .titleMedium
                       ?.copyWith(fontWeight: FontWeight.bold)),
             ),
-            const ListTile(
-              leading: Icon(Icons.info_outline),
-              title: Text('xmlyfm'),
-              subtitle: Text(
-                '版本 0.1.0\n喜马拉雅访客态只读客户端：不登录、不保存账号信息。\n'
-                '付费专辑的收费集仅支持试听，完整播放需官方客户端。',
+            ListTile(
+              leading: const Icon(Icons.info_outline),
+              title: const Text('xmlyfm'),
+              subtitle: FutureBuilder<PackageInfo>(
+                future: PackageInfo.fromPlatform(),
+                builder: (context, snapshot) {
+                  final info = snapshot.data;
+                  // 版本号不在代码里硬编码：CI 构建时由 git tag 解析出
+                  // --build-name 注入（见 .github/workflows/release.yml），
+                  // 运行时经 package_info_plus 读回；本地开发构建读到的是
+                  // pubspec 的 version。读取中/失败时不显示假版本号。
+                  final versionLine =
+                      (info != null && info.version.isNotEmpty)
+                          ? '版本 ${info.version}'
+                              '${info.buildNumber.isNotEmpty ? '（构建 ${info.buildNumber}）' : ''}\n'
+                          : '';
+                  return Text(
+                    '$versionLine喜马拉雅访客态只读客户端：不登录、不保存账号信息。\n'
+                    '付费专辑的收费集仅支持试听，完整播放需官方客户端。',
+                  );
+                },
               ),
             ),
           ],
