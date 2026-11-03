@@ -5,11 +5,15 @@ import '../core/responsive.dart';
 import '../models/models.dart';
 import '../services/ximalaya_service.dart';
 import '../widgets/album_card.dart';
+import '../widgets/home_sections.dart';
 import 'album_screen.dart';
 import 'category_screen.dart';
+import 'ranking_screen.dart';
 
 /// 首页（发现）：顶部页签（customCategories）+ 推荐流（v4/mix）。
-/// 推荐页签显示信息流；分类页签点击进入分类页。
+/// 推荐页签顶部依次是板块（文档 §2.9）：分类金刚区、全站热播榜
+/// 排行榜卡，其下才是原推荐流；分类页签点击进入分类页。
+/// 「猜你喜欢」接口实测访客态拿不到数据（见 §2.9），不设此板块。
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -27,6 +31,11 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _hasMore = true;
   String? _error;
   final _scrollController = ScrollController();
+
+  /// 全站热播榜预览（前三）与全站榜单页签（「排行榜 · 更多」用），
+  /// 拉取失败时保持为空，板块整卡不显示、不影响推荐流。
+  List<RankAlbum> _rankPreview = [];
+  List<CategoryRankTab> _siteRankTabs = [];
 
   XimalayaService get _service => context.read<XimalayaService>();
 
@@ -62,12 +71,35 @@ class _HomeScreenState extends State<HomeScreen> {
         _hasMore = page.items.isNotEmpty;
         _loading = false;
       });
+      _loadRankPreview();
     } on XmException catch (e) {
       if (!mounted) return;
       setState(() {
         _error = e.message;
         _loading = false;
       });
+    }
+  }
+
+  /// 排行榜板块数据：目录 → 全站热播榜页签 → 明细第一页取前三。
+  /// 与分类榜共用 fetchRankCatalog/fetchRankAlbums 数据链（文档 §2.9）。
+  Future<void> _loadRankPreview() async {
+    try {
+      final catalog = await _service.fetchRankCatalog();
+      final siteTabs = RankAggregate.tabsForSite(catalog);
+      final hot = RankAggregate.siteHotTab(catalog);
+      if (hot == null) return;
+      final page = await _service.fetchRankAlbums(
+        rankingListId: hot.rankingListId,
+        clusterType: hot.clusterType,
+      );
+      if (!mounted) return;
+      setState(() {
+        _siteRankTabs = siteTabs;
+        _rankPreview = page.albums.take(3).toList();
+      });
+    } on XmException {
+      // 榜单拉取失败静默：整卡不显示，推荐流不受影响
     }
   }
 
@@ -117,6 +149,24 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _openCategoryPage() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const CategoryScreen()),
+    );
+  }
+
+  void _openSiteRanking() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => RankingScreen(
+          categoryId: 0,
+          categoryName: '全站',
+          tabs: _siteRankTabs,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -151,20 +201,65 @@ class _HomeScreenState extends State<HomeScreen> {
         Expanded(
           child: RefreshIndicator(
             onRefresh: _loadInitial,
-            child: isWide(context) ? _buildFeedGrid() : _buildFeedList(),
+            child: CustomScrollView(
+              controller: _scrollController,
+              slivers: [
+                ..._buildSectionSlivers(),
+                _buildFeedSliver(),
+                if (_hasMore)
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildFeedItem(int i) {
-    if (i >= _feed.length) {
-      return const Padding(
-        padding: EdgeInsets.all(16),
-        child: Center(child: CircularProgressIndicator()),
+  /// 推荐页签顶部板块：金刚区 + 排行榜卡（猜你喜欢未上线，见类注释）。
+  /// 宽屏（≥900）金刚区 8 列一整排；排行榜卡通栏一行（无并排卡时
+  /// 不留空位）；中等档（600–899）金刚区 4 列、板块上下堆叠。
+  List<Widget> _buildSectionSlivers() {
+    final slivers = <Widget>[];
+    final gridCategories = HomeTab.gridCategories(_tabs);
+    if (gridCategories.isNotEmpty) {
+      slivers.add(
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          sliver: SliverToBoxAdapter(
+            child: CategoryGrid(
+              categories: gridCategories,
+              crossAxisCount: isExpanded(context) ? 8 : 4,
+              onCategoryTap: _onTabTap,
+              onMoreTap: _openCategoryPage,
+            ),
+          ),
+        ),
       );
     }
+    if (_rankPreview.isNotEmpty) {
+      slivers.add(
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          sliver: SliverToBoxAdapter(
+            child: RankPreviewCard(
+              albums: _rankPreview,
+              onMore: _openSiteRanking,
+              onAlbumTap: (a) => _openAlbum(a.albumId),
+            ),
+          ),
+        ),
+      );
+    }
+    return slivers;
+  }
+
+  Widget _buildFeedItem(int i) {
     final album = _feed[i];
     return AlbumCard(
       title: album.title,
@@ -174,32 +269,33 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// 紧凑档：单列列表（原形态）
-  Widget _buildFeedList() {
-    return ListView.builder(
-      controller: _scrollController,
+  /// 推荐流：紧凑档单列列表；中 / 宽屏专辑卡片网格（列数随宽度
+  /// 自动增减，约 2–5 列）。分页的加载指示独立成尾部 sliver。
+  Widget _buildFeedSliver() {
+    if (isWide(context)) {
+      return SliverPadding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+        sliver: SliverGrid.builder(
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 380,
+            mainAxisExtent: 132,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 10,
+          ),
+          itemCount: _feed.length,
+          itemBuilder: (context, i) => _buildFeedItem(i),
+        ),
+      );
+    }
+    return SliverPadding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-      itemCount: _feed.length + (_hasMore ? 1 : 0),
-      itemBuilder: (context, i) => Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: _buildFeedItem(i),
+      sliver: SliverList.builder(
+        itemCount: _feed.length,
+        itemBuilder: (context, i) => Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: _buildFeedItem(i),
+        ),
       ),
-    );
-  }
-
-  /// 中 / 宽屏：专辑卡片网格，列数随可用宽度自动增减（约 2–5 列）
-  Widget _buildFeedGrid() {
-    return GridView.builder(
-      controller: _scrollController,
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 380,
-        mainAxisExtent: 132,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 10,
-      ),
-      itemCount: _feed.length + (_hasMore ? 1 : 0),
-      itemBuilder: (context, i) => _buildFeedItem(i),
     );
   }
 
