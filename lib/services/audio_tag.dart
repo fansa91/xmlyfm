@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:path/path.dart' as p;
+
 /// 要写入音频文件的标签数据（下载完成时由 DownloadTask/Track 字段组装）。
 /// 可选字段为空/0 时不写对应帧——拿不到的元信息宁可缺省，不编造。
 class AudioTagData {
@@ -168,7 +170,9 @@ class AudioTagWriter {
                 ..add(Uint8List.sublistView(bytes, strip)))
               .toBytes();
 
-      tmp = File('${file.path}.tagging');
+      tmp = File(
+        p.join(p.dirname(file.path), '${p.basename(file.path)}.tagging'),
+      );
       await tmp.writeAsBytes(out, flush: true);
 
       // 校验：总长度一致、头是 ID3、标签后紧跟的音频字节与原文一致

@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -160,12 +161,16 @@ class DownloadTask {
 /// （设置里的自定义目录优先，iOS 除外；缺省为应用文档目录 downloads/）；
 /// 任务列表以 SharedPreferences JSON 持久化。
 ///
-/// - 并发上限 2，其余排队；暂停/取消/重试均为单任务级，另有全部暂停/继续。
+/// - 严格 FIFO 串行队列：同一时刻只下载 1 个，按入队顺序推进；暂停的
+///   排队任务轮到时跳过，正在下的被暂停/取消/失败后自动取下一个。
+///   暂停/取消/重试均为单任务级，另有全部暂停/继续。
 /// - 不做断点续传：暂停即删半截文件，继续时重新解析地址整文件重下。
 /// - 重启恢复：已完成记录校验文件存在才保留；下载中/排队一律转暂停态。
 class DownloadService extends ChangeNotifier {
   static const _keyTasks = 'download_tasks';
-  static const maxConcurrent = 2;
+
+  /// 同时进行的下载数：串行队列恒为 1。
+  static const maxConcurrent = 1;
 
   final PlayResolver resolver;
   final SettingsService settings;
@@ -241,7 +246,7 @@ class DownloadService extends ChangeNotifier {
   static Future<bool> prepareDirectory(Directory dir) async {
     try {
       if (!await dir.exists()) await dir.create(recursive: true);
-      final probe = File('${dir.path}/.xmlyfm_probe');
+      final probe = File(p.join(dir.path, '.xmlyfm_probe'));
       await probe.writeAsString('ok', flush: true);
       await probe.delete();
       return true;
@@ -270,7 +275,7 @@ class DownloadService extends ChangeNotifier {
     _prefs = await SharedPreferences.getInstance();
     try {
       final docs = await getApplicationDocumentsDirectory();
-      _defaultDir = Directory('${docs.path}/downloads');
+      _defaultDir = Directory(p.join(docs.path, 'downloads'));
       _dir = await resolveDownloadDirectory(
         customPath: settings.downloadDirectory,
         defaultDir: _defaultDir!,
@@ -309,8 +314,10 @@ class DownloadService extends ChangeNotifier {
               // 旧版本记录没有持久化路径：历史下载都在默认目录下，
               // 按默认目录重建（不能用当前生效目录，否则换过目录后
               // 已完成记录会全部对不上文件被丢弃）
-              task.filePath =
-                  '${(_defaultDir ?? _dir)!.path}/${task.fileName}';
+              task.filePath = p.join(
+                (_defaultDir ?? _dir)!.path,
+                task.fileName,
+              );
             }
             if (task.status == DownloadStatus.completed) {
               // 已完成记录必须文件还在，否则丢弃记录
@@ -433,7 +440,7 @@ class DownloadService extends ChangeNotifier {
       ext,
       (candidate) =>
           taken.contains(candidate) ||
-          File('${dir.path}/$candidate').existsSync(),
+          File(p.join(dir.path, candidate)).existsSync(),
     );
     return DownloadTask(
       trackId: track.trackId,
@@ -449,7 +456,7 @@ class DownloadService extends ChangeNotifier {
       albumTotal: albumTotal,
       trackJson: jsonEncode(track.toJson()),
       fileName: fileName,
-      filePath: '${dir.path}/$fileName',
+      filePath: p.join(dir.path, fileName),
       createdAt: DateTime.now().millisecondsSinceEpoch,
     );
   }
@@ -555,14 +562,17 @@ class DownloadService extends ChangeNotifier {
 
   // ---------- 执行 ----------
 
+  /// 队列推进：严格串行——已有任务在下时不动（其收尾会再调 _pump）；
+  /// 否则按入队顺序取第一个排队态任务开跑。任务列表新入队在前，
+  /// 故从尾部（最早入队）起扫描；已暂停的任务状态不是 queued，天然跳过，
+  /// 失败/完成/取消也都在 _run 的 finally 里回到这里推进下一个。
   void _pump() {
-    final running = _tokens.length;
-    if (running >= maxConcurrent) return;
-    for (final t in _tasks) {
-      if (_tokens.length >= maxConcurrent) break;
-      if (t.status == DownloadStatus.queued &&
-          !_tokens.containsKey(t.trackId)) {
+    if (_tokens.isNotEmpty) return;
+    for (var i = _tasks.length - 1; i >= 0; i--) {
+      final t = _tasks[i];
+      if (t.status == DownloadStatus.queued) {
         unawaited(_run(t));
+        return;
       }
     }
   }
@@ -614,11 +624,26 @@ class DownloadService extends ChangeNotifier {
         if (await file.exists()) await file.delete();
         return;
       }
-      task.status = DownloadStatus.completed;
+      // 完整性校验：落盘文件必须真实存在且非空，才继续往下走
+      if (!await file.exists() || await file.length() <= 0) {
+        throw const XmException('下载文件缺失或为空，请重试');
+      }
       task.fileSize = await file.length();
       task.downloadedBytes = task.fileSize;
       // 落盘后把标签写进文件本体（失败不影响完成状态，见 _tagCompletedFile）
       await _tagCompletedFile(task);
+      // 写标签走的是临时文件替换：期间任务可能被 remove（清孤儿文件），
+      // 文件也可能被外部动过。复检通过才置完成，文件没了置失败可重试。
+      if (!_tasks.any((t) => t.trackId == task.trackId)) {
+        if (await file.exists()) await file.delete();
+        return;
+      }
+      if (!await file.exists() || await file.length() <= 0) {
+        throw const XmException('下载文件写入失败，请重试');
+      }
+      task.fileSize = await file.length();
+      task.downloadedBytes = task.fileSize;
+      task.status = DownloadStatus.completed;
     } on DioException catch (e) {
       if (e.type == DioExceptionType.cancel ||
           _pauseRequested.contains(task.trackId)) {
@@ -712,6 +737,13 @@ class DownloadService extends ChangeNotifier {
       }
     } catch (_) {
       task.tagged = false;
+    } finally {
+      // 写标签的临时文件无论成败都不许残留（writeToFile 内部已清，
+      // 这里再兜底一次，防异常路径漏网）
+      try {
+        final leftover = File('${task.filePath}.tagging');
+        if (await leftover.exists()) await leftover.delete();
+      } catch (_) {}
     }
   }
 

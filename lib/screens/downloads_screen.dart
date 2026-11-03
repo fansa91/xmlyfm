@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/file_reveal.dart';
 import '../core/responsive.dart';
 import '../core/utils.dart';
 import '../services/download_service.dart';
@@ -49,31 +50,44 @@ class DownloadsScreen extends StatelessWidget {
           ],
         ),
         body: ConstrainedCenter(
-          child: downloads.tasks.isEmpty
-            ? const Center(child: Text('暂无下载，在专辑页点下载图标即可添加'))
-            : ListView(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-                    child: Text(
-                      '共 ${done.length} 个文件 · 占用 ${formatBytes(downloads.totalBytes)}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+          child: Column(
+            children: [
+              // 桌面端：实际下载目录全路径 + 打开目录（移动端隐藏）
+              if (FileReveal.supported && downloads.downloadDirPath != null)
+                _buildDirBar(context, downloads.downloadDirPath!),
+              Expanded(
+                child: downloads.tasks.isEmpty
+                    ? const Center(
+                        child: Text('暂无下载，在专辑页点下载图标即可添加'),
+                      )
+                    : ListView(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                            child: Text(
+                              '共 ${done.length} 个文件 · 占用 ${formatBytes(downloads.totalBytes)}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                          if (active.isNotEmpty) ...[
+                            _sectionTitle(context, '进行中'),
+                            for (final t in active) _buildActiveTile(context, t),
+                          ],
+                          if (done.isNotEmpty) ...[
+                            _sectionTitle(context, '已完成'),
+                            for (final t in done) _buildDoneTile(context, t),
+                          ],
+                          const SizedBox(height: 24),
+                        ],
                       ),
-                    ),
-                  ),
-                  if (active.isNotEmpty) ...[
-                    _sectionTitle(context, '进行中'),
-                    for (final t in active) _buildActiveTile(context, t),
-                  ],
-                  if (done.isNotEmpty) ...[
-                    _sectionTitle(context, '已完成'),
-                    for (final t in done) _buildDoneTile(context, t),
-                  ],
-                  const SizedBox(height: 24),
-                ],
               ),
+            ],
+          ),
         ),
       ),
     );
@@ -173,12 +187,69 @@ class DownloadsScreen extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: IconButton(
-        icon: const Icon(Icons.delete_outline),
-        tooltip: '删除下载',
-        onPressed: () => _confirmDelete(context, task),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (FileReveal.supported)
+            IconButton(
+              icon: const Icon(Icons.folder_open_outlined),
+              tooltip: '在文件夹中显示',
+              onPressed: () async {
+                final ok = await FileReveal.revealFile(task.filePath);
+                if (!ok && context.mounted) {
+                  _showRevealFailed(context, task.filePath);
+                }
+              },
+            ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            tooltip: '删除下载',
+            onPressed: () => _confirmDelete(context, task),
+          ),
+        ],
       ),
       onTap: () => context.read<PlayerService>().playTrack(task.toTrack()),
+    );
+  }
+
+  /// 桌面端顶部：当前实际下载目录全路径 + 「打开目录」。
+  Widget _buildDirBar(BuildContext context, String dirPath) {
+    final color = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
+      child: Row(
+        children: [
+          Icon(Icons.folder_outlined, size: 18, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              dirPath,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, color: color),
+            ),
+          ),
+          TextButton.icon(
+            icon: const Icon(Icons.open_in_new, size: 16),
+            label: const Text('打开目录'),
+            onPressed: () async {
+              final ok = await FileReveal.openDirectory(dirPath);
+              if (!ok && context.mounted) {
+                _showRevealFailed(context, dirPath);
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRevealFailed(BuildContext context, String path) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('无法自动打开，请手动前往：$path'),
+        duration: const Duration(seconds: 6),
+      ),
     );
   }
 
