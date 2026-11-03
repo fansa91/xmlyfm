@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/models.dart';
+import 'audio_tag.dart';
 import 'download_filename.dart';
 import 'play_resolver.dart';
 import 'settings_service.dart';
@@ -42,6 +43,10 @@ class DownloadTask {
   int downloadedBytes;
   DownloadStatus status;
   String? errorMessage;
+
+  /// 是否已把标签（标题/专辑/主播/序号/封面）写进文件本体。
+  /// 仅 MP3 写 ID3v2；m4a 等容器跳过本体标签（元信息在任务记录里），恒 false。
+  bool tagged;
   final int createdAt;
 
   DownloadTask({
@@ -60,6 +65,7 @@ class DownloadTask {
     this.downloadedBytes = 0,
     this.status = DownloadStatus.queued,
     this.errorMessage,
+    this.tagged = false,
     required this.createdAt,
   });
 
@@ -103,6 +109,7 @@ class DownloadTask {
     'downloadedBytes': downloadedBytes,
     'status': status.name,
     'errorMessage': errorMessage,
+    'tagged': tagged,
     'createdAt': createdAt,
   };
 
@@ -127,6 +134,7 @@ class DownloadTask {
       downloadedBytes: json['downloadedBytes'] as int? ?? 0,
       status: status,
       errorMessage: json['errorMessage'] as String?,
+      tagged: json['tagged'] as bool? ?? false,
       createdAt: json['createdAt'] as int? ?? 0,
     );
   }
@@ -200,7 +208,20 @@ class DownloadService extends ChangeNotifier {
       _dir = null;
       return;
     }
+    await _loadTasks();
+    await _save();
+  }
 
+  /// 测试用：跳过 path_provider，直接指定下载目录完成初始化。
+  @visibleForTesting
+  Future<void> initForTest(Directory dir) async {
+    _prefs = await SharedPreferences.getInstance();
+    _dir = dir;
+    if (!await dir.exists()) await dir.create(recursive: true);
+    await _loadTasks();
+  }
+
+  Future<void> _loadTasks() async {
     final raw = _prefs.getString(_keyTasks);
     if (raw != null && raw.isNotEmpty) {
       try {
@@ -282,6 +303,28 @@ class DownloadService extends ChangeNotifier {
       return e.message;
     }
 
+    final task = _buildTask(
+      track,
+      albumTitle: albumTitle,
+      index: index,
+      url: url,
+      dir: dir,
+    );
+    _tasks.insert(0, task);
+    await _save();
+    notifyListeners();
+    _pump();
+    return null;
+  }
+
+  /// 按文件名模板与去重规则组装一个待下载任务（手动入队/自动缓存共用）。
+  DownloadTask _buildTask(
+    Track track, {
+    required String albumTitle,
+    required int index,
+    required String url,
+    required Directory dir,
+  }) {
     final albumName = albumTitle.isNotEmpty
         ? albumTitle
         : (track.nickname.isNotEmpty ? track.nickname : '未知专辑');
@@ -302,8 +345,7 @@ class DownloadService extends ChangeNotifier {
           taken.contains(candidate) ||
           File('${dir.path}/$candidate').existsSync(),
     );
-
-    final task = DownloadTask(
+    return DownloadTask(
       trackId: track.trackId,
       albumId: track.albumId,
       albumTitle: albumTitle,
@@ -317,11 +359,52 @@ class DownloadService extends ChangeNotifier {
       filePath: '${dir.path}/$fileName',
       createdAt: DateTime.now().millisecondsSinceEpoch,
     );
+  }
+
+  /// 播放自动缓存的入队判定（纯逻辑）：已有任务（任何状态，含已完成）、
+  /// 付费试听、无可下地址 → 都不缓存，避免在下载管理里留重复项/残集。
+  static bool shouldCacheForPlayback({
+    required bool hasExistingTask,
+    required PlayResult result,
+  }) {
+    if (hasExistingTask) return false;
+    if (result.isSample) return false;
+    final url = result.url;
+    return url != null && url.isNotEmpty;
+  }
+
+  /// 静默缓存入队（iOS 起播自动缓存用）：后台下载，不阻塞播放。
+  /// 条件不满足直接返回 false、不产生任何提示；返回 true 表示已新建任务。
+  /// 下完后与手动下载完全一致：写标签、进下载管理、可离线播。
+  Future<bool> cacheForPlayback(
+    Track track, {
+    String albumTitle = '',
+    int index = 0,
+  }) async {
+    final dir = _dir;
+    if (dir == null) return false;
+    if (taskFor(track.trackId) != null) return false;
+    final PlayResult result;
+    try {
+      result = await resolver.resolve(track, quality: settings.defaultQuality);
+    } catch (_) {
+      return false;
+    }
+    if (!shouldCacheForPlayback(hasExistingTask: false, result: result)) {
+      return false;
+    }
+    final task = _buildTask(
+      track,
+      albumTitle: albumTitle,
+      index: index,
+      url: result.url!,
+      dir: dir,
+    );
     _tasks.insert(0, task);
     await _save();
     notifyListeners();
     _pump();
-    return null;
+    return true;
   }
 
   /// 批量入队。返回 (成功入队数, 第一条失败原因或 null)。
@@ -481,6 +564,8 @@ class DownloadService extends ChangeNotifier {
       task.status = DownloadStatus.completed;
       task.fileSize = await file.length();
       task.downloadedBytes = task.fileSize;
+      // 落盘后把标签写进文件本体（失败不影响完成状态，见 _tagCompletedFile）
+      await _tagCompletedFile(task);
     } on DioException catch (e) {
       if (e.type == DioExceptionType.cancel ||
           _pauseRequested.contains(task.trackId)) {
@@ -506,5 +591,82 @@ class DownloadService extends ChangeNotifier {
       notifyListeners();
       _pump();
     }
+  }
+
+  // ---------- 标签写入 ----------
+
+  /// 测试用：直接对一个已完成任务执行写标签流程。
+  @visibleForTesting
+  Future<void> applyTagsForTest(DownloadTask task) => _tagCompletedFile(task);
+
+  /// 下载完成后把标签写进文件本体：标题/专辑/主播/集序号/封面。
+  ///
+  /// - 仅 MP3 写 ID3v2（[AudioTagWriter]）；m4a/mp4 容器手写改 ilst 风险高，
+  ///   跳过本体标签——元信息仍完整保存在任务记录里，tagged 保持 false。
+  /// - 封面图拉取失败则写无图标签，不阻塞；写标签失败保留原文件，
+  ///   任务照样算完成。成功后按新文件大小回填 fileSize。
+  Future<void> _tagCompletedFile(DownloadTask task) async {
+    if (!AudioTagWriter.supportsTagging(task.fileName)) {
+      task.tagged = false;
+      return;
+    }
+    try {
+      Uint8List? coverBytes;
+      var coverMime = 'image/jpeg';
+      if (task.cover.isNotEmpty) {
+        final fetched = await _fetchCover(task.cover);
+        if (fetched != null) {
+          coverBytes = fetched.$1;
+          coverMime = fetched.$2;
+        }
+      }
+      final ok = await AudioTagWriter.writeToFile(
+        File(task.filePath),
+        AudioTagData(
+          title: task.title,
+          album: task.albumTitle.isNotEmpty ? task.albumTitle : task.nickname,
+          artist: task.nickname,
+          trackNumber: task.index,
+          coverBytes: coverBytes,
+          coverMime: coverMime,
+        ),
+      );
+      task.tagged = ok;
+      if (ok) {
+        final f = File(task.filePath);
+        if (await f.exists()) {
+          task.fileSize = await f.length();
+          task.downloadedBytes = task.fileSize;
+        }
+      }
+    } catch (_) {
+      task.tagged = false;
+    }
+  }
+
+  /// 拉封面图字节与 MIME（响应头优先，其次按 URL 后缀猜）；失败返回 null。
+  Future<(Uint8List, String)?> _fetchCover(String url) async {
+    try {
+      final resp = await _dio.get<List<int>>(
+        url,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final data = resp.data;
+      if (data == null || data.isEmpty) return null;
+      var mime = resp.headers.value('content-type')?.split(';').first.trim();
+      if (mime == null || !mime.startsWith('image/')) {
+        mime = _mimeForCoverUrl(url);
+      }
+      return (Uint8List.fromList(data), mime);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static String _mimeForCoverUrl(String url) {
+    final lower = url.toLowerCase();
+    if (lower.contains('.png')) return 'image/png';
+    if (lower.contains('.webp')) return 'image/webp';
+    return 'image/jpeg';
   }
 }

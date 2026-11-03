@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:math';
 
 import 'package:audioplayers/audioplayers.dart';
@@ -27,6 +28,11 @@ class PlayerService extends ChangeNotifier {
 
   /// 下载服务（main 接线时注入）：起播时已下载完成的集优先播本地文件
   DownloadService? downloads;
+
+  /// 是否 iOS 平台（自动缓存判定用；默认取 dart:io 的 Platform.isIOS，
+  /// 测试可覆盖）。
+  @visibleForTesting
+  bool Function() isIOS = () => Platform.isIOS;
 
   final AudioPlayer _player = AudioPlayer();
   final Random _random = Random();
@@ -254,6 +260,8 @@ class PlayerService extends ChangeNotifier {
           errorMessage = null;
           notifyListeners();
           library.addHistory(track);
+          // iOS：起播成功后静默把这首加入下载队列缓存（不阻塞播放）
+          unawaited(maybeCacheForIOS(track, result, queueIndex: n));
           _prefetchNext(n);
           return;
         } catch (e) {
@@ -269,6 +277,26 @@ class PlayerService extends ChangeNotifier {
     } finally {
       _busy = false;
     }
+  }
+
+  /// iOS 起播自动缓存：网络起播一首尚未下载的声音时，静默把它加入
+  /// DownloadService 队列后台缓存，下完即成为普通「已完成」下载
+  /// （下载管理可见/可删/可离线播）。
+  ///
+  /// 非 iOS、无下载服务、试听（isSample）不触发；本地已下载的走本地
+  /// 路径根本不会到这里。同一首不重复入队、解析不到地址不入队等
+  /// 最终判定在 [DownloadService.cacheForPlayback]。全程无任何提示。
+  /// [queueIndex] 是队列位置，作集序号的近似（队列多来自专辑页顺序）。
+  @visibleForTesting
+  Future<void> maybeCacheForIOS(
+    Track track,
+    PlayResult result, {
+    int queueIndex = 0,
+  }) async {
+    final d = downloads;
+    if (d == null || !isIOS()) return;
+    if (result.isSample || result.url == null) return;
+    await d.cacheForPlayback(track, index: queueIndex + 1);
   }
 
   /// 续播：跳回上次保存的位置（开头 5 秒内、贴近结尾、试听已达
