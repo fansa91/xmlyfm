@@ -1,31 +1,62 @@
-# xmlyfm · 播客 Flutter 客户端
+<p align="center">
+  <img src="assets/icon/app_icon.png" width="128" alt="xmlyfm 图标">
+</p>
 
-基于 [ultrazg/xyz](https://github.com/ultrazg/xyz) 项目抓取的小宇宙FM 官方接口开发的第三方播客客户端，**直连官方 API，无需部署后端**。
+# xmlyfm（喜马拉雅第三方客户端）
 
-- 接口：`https://api.xiaoyuzhoufm.com`（小宇宙官方 App 接口，请求头仿官方 iOS 客户端）
-- 登录：手机号 + 短信验证码（官方 `podcaster-api.xiaoyuzhoufm.com` 登录接口）
-- UI：Material 3，动态取色 / 自定义主题色 / 纯黑模式，手机底部导航 + 桌面端左侧栏
+非官方第三方 Flutter 客户端，**访客态浏览 + 播放**：无需登录、无自建后端，直连喜马拉雅官方接口（`mobile.ximalaya.com` / `search.ximalaya.com`，接口整理自官方 App 逆向文档）。
 
-> 免责声明：本项目仅供学习研究使用，请遵守国家法律法规。
+- UI：原生 Material 3，动态取色 / 自定义种子色 / 纯黑模式
+- 布局自适应：手机底部导航；宽屏（≥600）左侧 NavigationRail，专辑页 / 播放页双栏
+- 平台：Android / iOS / macOS / Windows
+
+> 免责声明：本项目仅供学习研究使用，与喜马拉雅官方无关，请遵守国家法律法规。
 
 ## 功能
 
-- **发现**：编辑精选、大家都在听（支持换一换）、最热榜 / 锋芒榜 / 新星榜
-- **订阅**：我的订阅、订阅更新动态，订阅/取消订阅/星标
-- **搜索**：节目 / 单集搜索，热词推荐
-- **播客详情**：节目信息、单集列表（新到旧分页）、最受欢迎单集、相关节目推荐
-- **播放器**：单集播放、断点续播、播放进度云同步、倍速（0.5x–3.0x）、4 种播放模式、简介/ shownotes 查看、iOS 锁屏信息同步
-- **评论**：单集评论列表（最热/最新）、发表评论、点赞
-- **我的**：短信登录、我的收藏、收听历史、主题设置、退出登录
+- **首页**：推荐信息流（下拉刷新 + 分页）
+- **分类**：全量分类页签与各分类内容页
+- **搜索**：综合搜索（专辑 / 声音 / 主播等分栏）、搜索联想、热词与热搜榜
+- **专辑详情**：封面信息、简介、节目列表（分页加载、正序 / 倒序切换）
+- **播放器**：多档音质（标准 / 高清 / 臻品 / 无损等，按声音实际支持情况）、倍速、播放队列、断点续播（本地记录进度）、播放历史
+- **收藏**：收藏专辑与声音（本地持久化）
+- **下载管理**：
+  - 单集下载与多选批量下载，队列并发与进度、暂停 / 继续 / 重试，任务持久化
+  - 下载文件名格式可在设置中自定义（变量：`{album}` 专辑、`{title}` 标题、`{index}` 集序号、`{trackId}`、`{author}` 主播）
+  - 下载完成后将标签写入文件本体（MP3 的 ID3：标题 / 专辑 / 主播 / 集序号 / 封面图 / 简介 / 分类 / 发布日期 / 时长等；M4A 容器暂不写本体标签，信息保留在下载管理中）
+  - 默认下载路径可在设置中修改（iOS 除外，iOS 固定使用应用沙盒目录）
+  - 已下载的声音优先本地播放，断网可听
 
-## 构建
+## 已知限制（访客态与服务端规则，非客户端缺陷）
 
-推送 tag 即触发 GitHub Actions 多平台构建（Android APK / iOS IPA（未签名）/ macOS dmg / Windows zip，Linux 暂略）：
+- 付费声音仅提供约 180 秒试听，不可下载完整文件，客户端会明确标记「试听」
+- 部分播放链接受服务端地域限制（中国大陆以外可能无法播放）
+- 综合搜索接口偶受服务端风控影响，命中时结果为空，可稍后重试
+
+## 构建与发布
+
+版本号由 **git tag** 决定：推送 `v*` 标签触发 GitHub Actions 多平台构建（`.github/workflows/release.yml`），CI 从标签解析版本号（不足三段补齐，如 `v0.1` → `0.1.0`），构建号取 Actions 的 run number；`pubspec.yaml` 中的版本仅为占位。
+
+产物：Android APK（分架构）/ iOS IPA（未签名）/ macOS DMG / Windows ZIP。
+
+Android 固定签名（可选）：在仓库 Settings → Secrets 中配置以下变量后，Release 构建将使用固定钥匙签名（可覆盖升级）；未配置时每次构建临时自签。
+
+- `ANDROID_KEYSTORE_BASE64`
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+
+本地开发：
 
 ```bash
-git tag v1.0.0 && git push origin v1.0.0
+flutter pub get
+flutter analyze
+flutter test
+flutter run
 ```
 
-## 开发说明
+## 技术说明
 
-接口抓包定义见 [ultrazg/xyz](https://github.com/ultrazg/xyz) 的 `handlers/` 与 `doc/docs/`。App 内 `lib/core/api.dart` 的请求头照抄该项目抓到的官方 App 请求头；官方接口变更时同步更新即可。
+- 数据层直连官方接口，播放链接按声音类型三路解析：专辑列表直带链接 → 播放页 baseInfo 接口（v4 签名已实现）→ 付费声音走试听标记
+- 本地数据（收藏 / 历史 / 进度 / 下载任务 / 设置）使用 SharedPreferences 持久化
+- 界面全程使用原生 Material 3 组件，颜色走 ColorScheme 动态取色
