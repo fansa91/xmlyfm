@@ -152,6 +152,8 @@ void main() {
       final settings = SettingsService();
       await settings.init();
       svc = DownloadService(FakeResolver((_) => const PlayResult()), settings);
+      // 写标签是 iOS 逻辑：测试宿主非 iOS，显式打开门控走写标签路径
+      svc.isIOS = () => true;
       dir = await Directory.systemTemp.createTemp('svc_tag');
       await svc.initForTest(dir);
     });
@@ -253,6 +255,25 @@ void main() {
       final frames = AudioTagWriter.parseFrames(await File(path).readAsBytes());
       expect(frames.containsKey('TIT2'), isTrue);
       expect(frames.containsKey('APIC'), isFalse);
+    });
+
+    test('平台门控：非 iOS 时 mp3 也不写标签，文件不动', () async {
+      svc.isIOS = () => false;
+      final audio = fakeAudio();
+      final path = '${dir.path}/e.mp3';
+      await File(path).writeAsBytes(audio);
+      final task = completedTask('e.mp3', path);
+      await svc.applyTagsForTest(task);
+      expect(task.tagged, isFalse);
+      expect(await File(path).readAsBytes(), audio);
+    });
+
+    test('平台门控：默认判定取 Platform.isIOS', () {
+      final fresh = DownloadService(
+        FakeResolver((_) => const PlayResult()),
+        svc.settings,
+      );
+      expect(fresh.isIOS(), Platform.isIOS);
     });
 
     test('tagged 标记随任务 JSON 往返持久化', () {

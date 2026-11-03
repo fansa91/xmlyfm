@@ -45,7 +45,8 @@ class DownloadTask {
   String? errorMessage;
 
   /// 是否已把标签（标题/专辑/主播/序号/封面）写进文件本体。
-  /// 仅 MP3 写 ID3v2；m4a 等容器跳过本体标签（元信息在任务记录里），恒 false。
+  /// 写标签仅 iOS 平台执行，且仅 MP3 写 ID3v2；其他平台、以及 m4a 等
+  /// 容器（跳过本体标签，元信息在任务记录里）恒为 false。
   bool tagged;
   final int createdAt;
 
@@ -153,6 +154,12 @@ class DownloadService extends ChangeNotifier {
   final PlayResolver resolver;
   final SettingsService settings;
   final Dio _dio;
+
+  /// 是否 iOS 平台（下载写标签的门控判定用；默认取 dart:io 的
+  /// Platform.isIOS，测试可覆盖）。标签写入仅 iOS 执行，其他平台
+  /// 下载只落盘原始文件。
+  @visibleForTesting
+  bool Function() isIOS = () => Platform.isIOS;
 
   late SharedPreferences _prefs;
   Directory? _dir;
@@ -555,11 +562,17 @@ class DownloadService extends ChangeNotifier {
 
   /// 下载完成后把标签写进文件本体：标题/专辑/主播/集序号/封面。
   ///
+  /// - **仅 iOS 平台执行**（平台门控）：Android/桌面/Web 等平台的下载
+  ///   保持原始文件不写本体标签，tagged 记 false。
   /// - 仅 MP3 写 ID3v2（[AudioTagWriter]）；m4a/mp4 容器手写改 ilst 风险高，
   ///   跳过本体标签——元信息仍完整保存在任务记录里，tagged 保持 false。
   /// - 封面图拉取失败则写无图标签，不阻塞；写标签失败保留原文件，
   ///   任务照样算完成。成功后按新文件大小回填 fileSize。
   Future<void> _tagCompletedFile(DownloadTask task) async {
+    if (!isIOS()) {
+      task.tagged = false;
+      return;
+    }
     if (!AudioTagWriter.supportsTagging(task.fileName)) {
       task.tagged = false;
       return;
